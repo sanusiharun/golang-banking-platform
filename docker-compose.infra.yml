@@ -1,0 +1,149 @@
+# docker-compose.infra.yml — observability infrastructure stack.
+#
+# Contains: Jaeger (traces), Prometheus (metrics), Alertmanager (alerts), Grafana (UI)
+# Does NOT contain any microservices — those live in docker-compose.yml
+#
+# Start:    make infra-up
+# Stop:     make infra-down
+# Logs:     docker compose -f docker-compose.infra.yml logs -f
+
+networks:
+  banking-net:
+    name: banking-net      # fixed name so services compose can join it
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  loki-data:
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Loki — log storage (like Prometheus but for logs)
+  # API: http://localhost:3100
+  # ──────────────────────────────────────────────────────────────────────────
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: banking-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./infra/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/loki-config.yml
+    networks:
+      - banking-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Promtail — log collector (reads Docker container logs → ships to Loki)
+  # Needs access to Docker socket to read container logs
+  # ──────────────────────────────────────────────────────────────────────────
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: banking-promtail
+    restart: unless-stopped
+    user: root   # needed to read Docker socket on macOS Docker Desktop
+    volumes:
+      - ./infra/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # MODE B: local log files written by "make run-*" targets
+      - ./logs:/var/log/banking:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+    networks:
+      - banking-net
+    depends_on:
+      - loki
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Jaeger — distributed tracing
+  # UI:        http://localhost:16686
+  # OTLP gRPC: localhost:4317  ← services send traces here
+  # ──────────────────────────────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: banking-jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    networks:
+      - banking-net
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Alertmanager — alert routing, deduplication, silencing
+  # UI:  http://localhost:9093
+  # ──────────────────────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: banking-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - banking-net
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.listen-address=:9093"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Prometheus — metrics scraping + alert rule evaluation
+  # UI:     http://localhost:9090
+  # Reload: POST http://localhost:9090/-/reload
+  # ──────────────────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: banking-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/alerting/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - banking-net
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+      - "--storage.tsdb.retention.time=7d"
+    depends_on:
+      - alertmanager
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Grafana — dashboards, alerts UI, single pane of glass
+  # UI:    http://localhost:3000
+  # Login: admin / admin
+  # ──────────────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: banking-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./infra/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - banking-net
+    depends_on:
+      - prometheus

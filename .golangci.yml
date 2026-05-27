@@ -1,0 +1,92 @@
+# .golangci.yml — golangci-lint configuration for the banking platform.
+# Run with: golangci-lint run ./...
+
+run:
+  timeout: 5m
+  go: "1.23"
+  tests: true
+
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  enable:
+    - errcheck        # checks unchecked errors
+    - gosimple        # simplification suggestions
+    - govet           # go vet checks
+    - ineffassign     # detects ineffectual assignments
+    - staticcheck     # static analysis
+    - unused          # checks for unused code
+    - gofmt           # enforces gofmt formatting
+    - goimports       # checks import ordering
+    - revive          # drop-in replacement for golint
+    - gocritic        # wide range of style checks
+    - gosec           # security checks
+    - exhaustive      # checks exhaustiveness of enum switches
+    - prealloc        # suggests slice pre-allocation
+    - bodyclose       # checks HTTP response body is closed
+    - noctx           # finds http requests without context
+    - rowserrcheck    # checks sql.Rows.Err is checked
+    - sqlclosecheck   # checks sql.Rows/Stmt are closed
+    - unparam         # reports unused function parameters
+    - misspell        # finds common misspellings
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: error-return
+        severity: error
+      - name: error-strings
+        severity: warning
+
+  gosec:
+    excludes:
+      - G404  # use of weak random number generator (math/rand) — we use crypto/rand
+    severity: medium
+    confidence: medium
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+    disabled-checks:
+      - ifElseChain
+      - singleCaseSwitch
+
+  exhaustive:
+    default-signifies-exhaustive: true
+
+  gofmt:
+    simplify: true
+
+  misspell:
+    locale: UK
+
+issues:
+  exclude-rules:
+    # Test files: relax some rules.
+    - path: "_test.go"
+      linters:
+        - errcheck
+        - gosec
+        - unparam
+    # Integration tests: allow skips on DB connectivity.
+    - path: "tests/integration"
+      linters:
+        - errcheck
+  max-issues-per-linter: 0
+  max-same-issues: 0

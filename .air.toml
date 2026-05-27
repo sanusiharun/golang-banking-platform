@@ -1,0 +1,39 @@
+# .air.toml — Air hot reload configuration for account-svc development.
+# Install Air: go install github.com/air-verse/air@latest
+# Run from repo root: cd services/account-svc && air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Command to build the binary.
+  cmd = "cd /app/services/account-svc && CGO_ENABLED=0 go build -o ./tmp/account-svc ./cmd/server"
+  # The binary Air should run after a successful build.
+  bin = "./tmp/account-svc"
+  # Watch these file extensions for changes.
+  include_ext = ["go", "tpl", "tmpl", "html", "env"]
+  # Exclude these directories from the watcher.
+  exclude_dir = ["tmp", "vendor", "testdata", "tests"]
+  # Kill the running process before rebuilding.
+  kill_delay = "200ms"
+  # Send interrupt before kill.
+  send_interrupt = true
+  # Delay before starting the binary after build.
+  delay = 1000 # ms
+  # Rerun the binary if no file changes but the process exits.
+  rerun = false
+
+[log]
+  # Show only log from air (not from the running app).
+  time = true
+  main_only = false
+
+[color]
+  main     = "magenta"
+  watcher  = "cyan"
+  build    = "yellow"
+  runner   = "green"
+
+[misc]
+  # Clean up tmp dir on exit.
+  clean_on_exit = true

@@ -1,0 +1,718 @@
+{
+  "title": "Platform Overview",
+  "uid": "platform-overview",
+  "description": "Platform-wide health, traffic, errors, latency, saturation and incident signals across all microservices.",
+  "schemaVersion": 38,
+  "version": 12,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["banking", "platform", "overview", "sre"],
+  "links": [
+    {
+      "title": "Service Overview",
+      "url": "/d/service-overview",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Drill into a specific service"
+    }
+  ],
+  "templating": { "list": [] },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Executive Summary",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 2,
+      "title": "Availability",
+      "description": "% of services currently reachable by Prometheus. 100% = all services UP.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * avg(up{job=~\".+-svc\"})",
+          "legendFormat": "availability"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 90 },
+              { "color": "green",  "value": 99 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 3,
+      "title": "Total Request Rate",
+      "description": "Requests per second across all services (excluding /metrics scrapes).",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\"}[$__rate_interval]))",
+          "legendFormat": "req/s"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      }
+    },
+
+    {
+      "id": 4,
+      "title": "Global Error Rate",
+      "description": "% of all HTTP responses that are 5xx across the platform.",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "(100 * sum(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\", status=~\"5..\"}[5m])) / sum(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\"}[5m]))) or vector(0)",
+          "legendFormat": "error %"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "noValue": "0%",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red",    "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 5,
+      "title": "Avg P99 Latency",
+      "description": "Average P99 latency across all services.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "avg(histogram_quantile(0.99, sum by (job, le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=~\".+-svc\"}[5m]))))",
+          "legendFormat": "P99"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "noValue": "—",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red",    "value": 0.5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 6,
+      "title": "Active Services",
+      "description": "Number of *-svc jobs currently reporting UP to Prometheus.",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count(up{job=~\".+-svc\"})",
+          "legendFormat": "services"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      }
+    },
+
+    {
+      "id": 7,
+      "title": "In-Flight Requests",
+      "description": "Total concurrent requests being processed right now across all services.",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum({__name__=~\".+_http_requests_in_flight\", job=~\".+-svc\"})",
+          "legendFormat": "in-flight"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 100 },
+              { "color": "red",    "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 8,
+      "type": "row",
+      "title": "Global Trends",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 9,
+      "title": "Request Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\"}[$__rate_interval]))",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "gradientMode": "opacity", "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 10,
+      "title": "Error Rate by Service (%)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * sum by (job)(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\", status=~\"5..\"}[5m])) / sum by (job)(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\"}[5m]))",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "gradientMode": "opacity", "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 11,
+      "title": "P99 Latency by Service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (job, le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=~\".+-svc\"}[$__rate_interval])))",
+          "legendFormat": "P50 — {{job}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (job, le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=~\".+-svc\"}[$__rate_interval])))",
+          "legendFormat": "P90 — {{job}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (job, le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=~\".+-svc\"}[$__rate_interval])))",
+          "legendFormat": "P99 — {{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 5, "gradientMode": "opacity", "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 12,
+      "type": "row",
+      "title": "Service Health Grid",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 13,
+      "title": "Services Health",
+      "description": "UP = Prometheus scrape succeeds. DOWN = service crashed or unreachable.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "up{job=~\".+-svc\"}",
+          "legendFormat": "{{job}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "job": "Service", "Value": "Status", "up": "Status", "team": "Team" },
+            "excludeByName": { "Time": true, "instance": true, "__name__": true, "environment": true, "cluster": true, "service": true },
+            "indexByName": { "job": 0, "up": 1, "Value": 1, "team": 2 }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "Service", "desc": false }],
+        "footer": { "show": false }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "left", "displayMode": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": {
+                    "1": { "text": "UP",   "color": "green", "index": 0 },
+                    "0": { "text": "DOWN", "color": "red",   "index": 1 }
+                  }}
+                ]
+              },
+              { "id": "custom.displayMode", "value": "color-background" },
+              { "id": "custom.width", "value": 100 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Service" },
+            "properties": [
+              { "id": "custom.width", "value": 200 },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View Service Dashboard",
+                    "url": "/d/service-overview?var-service=${__data.fields.Service}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 14,
+      "title": "Request Volume by Service",
+      "description": "Current req/s ranked by volume. Quickly spot which service is carrying most load.",
+      "type": "bargauge",
+      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\"}[5m]))",
+          "legendFormat": "{{job}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 0
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 15,
+      "title": "Top Error Endpoints (Platform)",
+      "description": "Endpoints generating the most 5xx errors across all services right now.",
+      "type": "table",
+      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (job, path)(rate({__name__=~\".+_http_requests_total\", job=~\".+-svc\", status=~\"5..\"}[5m])))",
+          "legendFormat": "{{job}} — {{path}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "job": "Service", "path": "Endpoint", "Value": "5xx/s" },
+            "excludeByName": { "Time": true, "__name__": true, "instance": true }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "5xx/s", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "align": "left", "displayMode": "auto" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "5xx/s" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 16,
+      "type": "row",
+      "title": "Go Runtime",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 17,
+      "title": "Goroutines by Service",
+      "description": "Goroutine count per service. Sudden spikes indicate goroutine leaks.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 37, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(go_goroutines{job=~\".+-svc\"})",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 18,
+      "title": "Heap Allocated by Service",
+      "description": "Go heap bytes currently allocated. Sustained growth without GC = memory leak.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 37, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(go_memstats_heap_alloc_bytes{job=~\".+-svc\"})",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 19,
+      "title": "GC Collections / sec by Service",
+      "description": "Garbage collection rate. High rate with high latency = GC pressure.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 44, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(rate(go_gc_duration_seconds_count{job=~\".+-svc\"}[$__rate_interval]))",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 20,
+      "title": "Process Memory RSS by Service",
+      "description": "Resident Set Size — OS-reported memory footprint including heap, stack, and shared libraries.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 44, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (job)(process_resident_memory_bytes{job=~\".+-svc\"})",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 21,
+      "type": "row",
+      "title": "Incident Signals",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 51, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 22,
+      "title": "Active Alerts",
+      "description": "Count of currently firing alert rules in Prometheus.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 52, "w": 4, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "alerts"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 23,
+      "title": "Firing Alerts",
+      "description": "All alert rules currently in firing state.",
+      "type": "table",
+      "gridPos": { "x": 4, "y": 52, "w": 20, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{alertname}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "alertname": "Alert", "severity": "Severity", "alertstate": "State", "job": "Service" },
+            "excludeByName": { "Time": true, "__name__": true, "Value": true, "instance": true, "environment": true, "cluster": true }
+          }
+        }
+      ],
+      "options": { "showHeader": true },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Severity" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": {
+                    "critical": { "text": "CRITICAL", "color": "red",    "index": 0 },
+                    "warning":  { "text": "WARNING",  "color": "yellow", "index": 1 },
+                    "info":     { "text": "INFO",     "color": "blue",   "index": 2 }
+                  }}
+                ]
+              },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 24,
+      "title": "Platform Logs — Error Stream",
+      "description": "Live error logs from all *-svc containers. Powered by Loki + Promtail. Click trace_id to jump to Jaeger.",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 58, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=~\".+-svc\"} | json | level=~\"error|warn\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "showLabels": false,
+        "showCommonLabels": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    }
+
+  ]
+}

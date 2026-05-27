@@ -1,0 +1,48 @@
+# Binaries
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test output
+*.test
+*.out
+coverage.html
+coverage.txt
+
+# Go workspace sum file (committed only if reproducibility required)
+go.work.sum
+
+# Build artefacts
+dist/
+*.tar.gz
+
+# Environment files (NEVER commit secrets)
+.env
+.env.*
+!.env.example
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Air (hot reload)
+tmp/
+
+# Logs — captured by Promtail for Loki, not committed
+*.log
+logs/*.log
+
+# Docker volumes
+postgres-data/
+prometheus-data/
+
+# golangci-lint cache
+.golangci-lint-cache/

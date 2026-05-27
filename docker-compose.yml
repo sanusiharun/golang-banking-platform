@@ -1,0 +1,121 @@
+# docker-compose.yml — microservices stack.
+#
+# Contains: all banking platform microservices
+# Requires: infra stack running first (make infra-up)
+#
+# NOTE: PostgreSQL is NOT managed here.
+# Use your existing Docker Desktop postgres-db container (localhost:5432).
+#
+# Start:  make services-up
+# Stop:   make services-down
+# Logs:   docker compose logs -f
+
+networks:
+  banking-net:
+    external: true   # created by docker-compose.infra.yml
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # auth-svc
+  # API:     http://localhost:8082
+  # Metrics: http://localhost:8082/metrics  ← scraped by Prometheus
+  #
+  # Owns the users table (authdb). Issues RS256 JWTs.
+  # POST /auth/login → returns signed JWT for use by all other services.
+  # ──────────────────────────────────────────────────────────────────────────
+  auth-svc:
+    build:
+      context: .
+      dockerfile: services/auth-svc/Dockerfile
+    container_name: banking-auth-svc
+    restart: unless-stopped
+    networks:
+      - banking-net
+    environment:
+      SERVICE_NAME: auth-svc
+      SERVICE_VERSION: "1.0.0"
+      ENVIRONMENT: local
+      HTTP_PORT: "8082"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      DB_HOST: host.docker.internal
+      DB_PORT: "5432"
+      DB_NAME: banking_auth
+      DB_USER: auth_svc
+      DB_PASSWORD: auth_svc_pass_local
+      DB_SSLMODE: disable
+      DB_MAX_CONNS: "10"
+      DB_MIN_CONNS: "2"
+      JWT_PRIVATE_KEY_B64: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUV2Z0lCQURBTkJna3Foa2lHOXcwQkFRRUZBQVNDQktnd2dnU2tBZ0VBQW9JQkFRREpPSHdibENic25rQmUKWGZrTmhHakNHOTJLQUlnemk2djZkc2h4Qk5CTkJBTWwxUzVrSVZueGRRcmRBWWczUGZ1d1NKaFBWN2xLR3locQpUUitMa1grV3VDelJiTTNMREZ0R1dXWU8zMlAwK2hMNG9UME52VVVZZmtpR2x2Qk84aFNTcTA2OUJUbkJZV2xxCmI2TldybmQxUjBBSmZpdENSQXpSRXMxVG4wNXZ5OUlkQk1vS1kwcE92dCtOU1dFMFJMRVo2UFQ5cmRCWUtDMjAKbEVpK0QrM0JqeVhRU3NjMTBUYzFlQUNBTUIyNkZRYkRKNDl4R2VjRUlpZk1pRG5Femw5SU5UanE2bk00UmdNbwovRHZRVXdZWHlBYzhiWFF4Qm50QXFGcm56WTBJVGd1enJQVjlLTWFjb00zT2kzck1BUnZ4N3QraHR1RTFPUjdsCjBsdUQ2NFRYQWdNQkFBRUNnZ0VBUzhqOVhUbTRTMGZ6QUZldVZIdjVKSnB3SHVqQ1kzK0lYMFhiaWsyQTBuRGYKYXFGVzNwbDlFYWErVjZ5YkRBdEpQd1NvY01HZVpKM0Q0LzEyRXcvU21RWjJ3czJTMkpXbnp1QWV3eDA1dld0dQpON3dxallFcWcrWVVGTFRHZjBWSG9GSHF6dUFuOTRCanZwV2JWQ3RUakpVd05pTVIwZHhsWTEwTWZpRXkzb0dlCmZndWcwakY5dk1haSs3NjIvS3ZzUnpyMjJLZGtDbGRVbDI4SElUQmdQVUh6MHlMM3lncTFRUjFJMUxsYmtFS0cKMHFiRWdpVkFzM3REMDlEUkJ5OEFrL0FMeWcyaG9qcWQ2YjZhRW9Ua09mbFlGbUhWRFlmaVIvbjMyem5hb1dOSgpqalVwUkJpbHdvalFwNjJTSnRJaVJkWk1JdE9zY3lXNVhRa3hyY3crMlFLQmdRRDlLQXBsWnNvMDhrV0s3K2dICkV4ZXBVaXdlWUx3d0dvK3lxUTdXc0k4d2RkT21yQURjYjdtNlZDTjhUWXFlbVovQ1NTNHlRVVJudFRKOHA1R2gKcG53UEMvOWhEUjA4Tnp0L0dUYW9WSGRqVkRHSnlSTFFPV2VwNGpQSjFETzZPRXlITDVhUThsbWtMWTlqOFNKaAowZVA5anFreGhCWHlGR3V0ZE1scVlCbEJGUUtCZ1FETGV4bnAzT3NIaXltZ3dpa3BlUXRWZUx3L0VZbTA0ZmhJCmNlRzBZdjF4S1pFUTRaekpSaEl2VlpHRnJrM1ZacWJLWkQxWS9MOFRYL0lpUFZjS1h2b3JIYjRqV1dlcEI2ZlAKQ0pRNFVTWUFqaE5IaUM1TzR0RFhjcmY3dHVTWDI3eXBhYVNmYXlxaUt1RTNGTExmTkNFSEhVb3BNWE5aTXczNApLTnFTNmpLeE93S0JnRXVlUWp5M3ozNnhQNFNZMUw0SVBmRWQwbi9nZFZZSkdSTk0zRm5VczNET1FVSnY3bkhxCkRaaFN1YWJQb3JCdFF3Tk55TGJLT0J5aVMwcGc0MmRkeTREVEhKMW94V3JQTkw1cVVhRkdXY01aeXhKVk5ZRnQKSkVIaWg0V3FGU2x5MTZrcDFkZkdESEMyQ3piWE9HWHZ4Q0poRXJqdnMzNTBDeFhzNUowWngzRmhBb0dCQU10cwp5MUJaRXdMY3BvWlg5ZXpIWFlSYWl1QUdlWVJEY1FPRURxQlhZb2J5aGx1NUloUzZuODJBbjFabEZ0MGtuZFN5CjkvM3gyRmpYVCt2WkpSNXlLMnBWZHRSQ09uYnE5MkhzY3JvR3JwWlpjMzdNNzNiZ0hPZDNnZVg5UjNWbU1hdXcKdU9yRHFjQ3NXN0hFV0xyNms1WllPdDhKMkFheUd1SWdmYnZvdFRzbkFvR0JBTkdDeXhMWUx0QW5OYk8wRWVhSgpqM3hZWWJEb2JLVnlqN0ZOZVBRZlluY0xzUGN6SHpTM0NuNllBM3BKWlVBSDJ5UnFyNU9kZ1FwTGNkSmJqcWl6Ckh5VENkTGtzeEE0dFp0V1JVbmVCZG41YVJnMU50VG5sajhtdE9NZkx1TXpYVEZBWHNjeExEc2Y3VGowNGZId1gKd1Z5cEhZRkpIeTVkcDJpeTgzemp6c1dVCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K"
+      JWT_ISSUER: banking-platform
+      JWT_TOKEN_TTL: 24h
+      OTEL_ENABLED: "true"
+      OTEL_LOGS_ENABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SAMPLING_RATE: "1.0"
+    ports:
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/healthz/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # account-svc
+  # API:     http://localhost:8081
+  # Metrics: http://localhost:8081/metrics  ← scraped by Prometheus
+  #
+  # Verifies RS256 JWTs using the PUBLIC key. Never issues tokens.
+  # Call auth-svc first to get a token, then use it here.
+  # ──────────────────────────────────────────────────────────────────────────
+  account-svc:
+    build:
+      context: .
+      dockerfile: services/account-svc/Dockerfile
+    container_name: banking-account-svc
+    restart: unless-stopped
+    networks:
+      - banking-net
+    depends_on:
+      auth-svc:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: account-svc
+      SERVICE_VERSION: "1.0.0"
+      ENVIRONMENT: local
+      HTTP_PORT: "8081"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      DB_HOST: host.docker.internal
+      DB_PORT: "5432"
+      DB_NAME: banking_accounts
+      DB_USER: account_svc
+      DB_PASSWORD: account_svc_pass_local
+      DB_SSLMODE: disable
+      DB_MAX_CONNS: "25"
+      DB_MIN_CONNS: "5"
+      JWT_PUBLIC_KEY_B64: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUF5VGg4RzVRbTdKNUFYbDM1RFlSbwp3aHZkaWdDSU00dXIrbmJJY1FUUVRRUURKZFV1WkNGWjhYVUszUUdJTnozN3NFaVlUMWU1U2hzb2FrMGZpNUYvCmxyZ3MwV3pOeXd4YlJsbG1EdDlqOVBvUytLRTlEYjFGR0g1SWhwYndUdklVa3F0T3ZRVTV3V0ZwYW0ralZxNTMKZFVkQUNYNHJRa1FNMFJMTlU1OU9iOHZTSFFUS0NtTktUcjdmalVsaE5FU3hHZWowL2EzUVdDZ3R0SlJJdmcvdAp3WThsMEVySE5kRTNOWGdBZ0RBZHVoVUd3eWVQY1JubkJDSW56SWc1eE01ZlNEVTQ2dXB6T0VZREtQdzcwRk1HCkY4Z0hQRzEwTVFaN1FLaGE1ODJOQ0U0THM2ejFmU2pHbktETnpvdDZ6QUViOGU3Zm9iYmhOVGtlNWRKYmcrdUUKMXdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg=="
+      JWT_ISSUER: banking-platform
+      RATE_LIMIT_RPS: "1000"
+      RATE_LIMIT_BURST: "2000"
+      OTEL_ENABLED: "true"
+      OTEL_LOGS_ENABLED: "false"
+      OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
+      OTEL_SAMPLING_RATE: "1.0"
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/healthz/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Add future microservices below ────────────────────────────────────────
+  # payment-svc — add JWT_PUBLIC_KEY_B64 (same value as account-svc above)
+  #
+  # notification-svc:
+  #   build: ...

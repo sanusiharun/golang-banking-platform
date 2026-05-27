@@ -1,0 +1,1128 @@
+{
+  "title": "Service Overview",
+  "uid": "service-overview",
+  "description": "Deep-dive into a single microservice. Switch services via the $service variable. All panels are fully reusable across account-svc, auth-svc, payment-svc, etc.",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "tags": ["banking", "service", "sre", "dynamic"],
+  "links": [
+    {
+      "title": "Platform Overview",
+      "url": "/d/platform-overview",
+      "type": "link",
+      "icon": "external link",
+      "tooltip": "Back to platform-wide view"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "Service",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(up{job=~\".+-svc\"}, job)",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1,
+        "current": {}
+      },
+      {
+        "name": "interval",
+        "label": "Interval",
+        "type": "interval",
+        "options": [
+          { "text": "auto", "value": "$__auto_interval_interval" },
+          { "text": "1m",   "value": "1m",  "selected": false },
+          { "text": "5m",   "value": "5m",  "selected": false },
+          { "text": "15m",  "value": "15m", "selected": false },
+          { "text": "30m",  "value": "30m", "selected": false }
+        ],
+        "auto": true,
+        "auto_count": 30,
+        "auto_min": "10s",
+        "current": { "text": "auto", "value": "$__auto_interval_interval" }
+      }
+    ]
+  },
+  "panels": [
+
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Executive Summary — $service",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 2,
+      "title": "Availability",
+      "description": "1 = UP (Prometheus scrape succeeds). 0 = DOWN.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "up{job=\"$service\"}",
+          "legendFormat": "",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "DOWN", "color": "red",   "index": 1 },
+              "1": { "text": "UP",   "color": "green", "index": 0 }
+            }}
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",   "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 3,
+      "title": "Request Rate",
+      "description": "Requests per second handled by this service right now.",
+      "type": "stat",
+      "gridPos": { "x": 3, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "req/s"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      }
+    },
+
+    {
+      "id": 4,
+      "title": "Error Rate",
+      "description": "% of responses that are 5xx in the last 5 minutes.",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "(100 * sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\", status=~\"5..\"}[5m])) / sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[5m]))) or vector(0)",
+          "legendFormat": "error %"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "noValue": "0%",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red",    "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 5,
+      "title": "P99 Latency",
+      "description": "99th percentile response time over last 5 minutes.",
+      "type": "stat",
+      "gridPos": { "x": 9, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[5m])))",
+          "legendFormat": "P99"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "noValue": "—",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red",    "value": 0.5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 6,
+      "title": "In-Flight Requests",
+      "description": "Concurrent requests being processed at this instant.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum({__name__=~\".+_http_requests_in_flight\", job=\"$service\"})",
+          "legendFormat": "in-flight"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red",    "value": 200 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 7,
+      "title": "Total Requests (1h)",
+      "description": "Cumulative request count over the last hour.",
+      "type": "stat",
+      "gridPos": { "x": 15, "y": 1, "w": 3, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(increase({__name__=~\".+_http_requests_total\", job=\"$service\"}[1h]))",
+          "legendFormat": "total",
+          "instant": true
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      }
+    },
+
+    {
+      "id": 8,
+      "title": "Active Alerts",
+      "description": "Prometheus alert rules currently firing.",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "alerts"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 9,
+      "type": "row",
+      "title": "Traffic & Errors",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 10,
+      "title": "Request Rate by Status",
+      "description": "Traffic volume split by HTTP status class. 2xx = success, 4xx = client errors, 5xx = server errors.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (status)(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "HTTP {{status}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "gradientMode": "opacity", "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byFrameRefID", "options": "5xx" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 11,
+      "title": "Error Rate (%)",
+      "description": "Percentage of requests returning 4xx or 5xx. SLO breach threshold at 5% 5xx.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\", status=~\"5..\"}[5m])) / sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[5m]))",
+          "legendFormat": "5xx %"
+        },
+        {
+          "expr": "100 * sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\", status=~\"4..\"}[5m])) / sum(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[5m]))",
+          "legendFormat": "4xx %"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 12, "gradientMode": "opacity", "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 5 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 12,
+      "title": "Top Traffic Endpoints",
+      "description": "Endpoints with the highest request rate — focus for performance optimisation.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (path)(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[5m])))",
+          "legendFormat": "{{path}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "path": "Endpoint", "Value": "req/s" },
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "req/s", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "req/s" },
+            "properties": [{ "id": "custom.displayMode", "value": "gradient-gauge" }]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 13,
+      "title": "Top Error Endpoints",
+      "description": "Endpoints generating the most 4xx/5xx responses — first targets for bug investigation.",
+      "type": "table",
+      "gridPos": { "x": 8, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (path)(rate({__name__=~\".+_http_requests_total\", job=\"$service\", status=~\"(4|5)..\"}[5m])))",
+          "legendFormat": "{{path}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "path": "Endpoint", "Value": "errors/s" },
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "errors/s", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "errors/s" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "color-background-solid" },
+              { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 14,
+      "title": "Top Slow Endpoints",
+      "description": "Endpoints with the highest P99 latency — primary candidates for optimisation.",
+      "type": "table",
+      "gridPos": { "x": 16, "y": 14, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.99, sum by (path, le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[5m]))))",
+          "legendFormat": "{{path}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "path": "Endpoint", "Value": "P99" },
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true, "le": true }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "P99", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "s", "decimals": 3, "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "P99" },
+            "properties": [
+              { "id": "custom.displayMode", "value": "gradient-gauge" },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green",  "value": null },
+                    { "color": "yellow", "value": 0.1 },
+                    { "color": "red",    "value": 0.5 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 15,
+      "type": "row",
+      "title": "Latency Analysis",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 21, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 16,
+      "title": "Latency Percentiles — P50 / P90 / P99",
+      "description": "P50 = median, P90 = typical slow, P99 = worst-case user experience. Divergence between P90 and P99 indicates outlier requests.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[$__rate_interval])))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[$__rate_interval])))",
+          "legendFormat": "P90"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[$__rate_interval])))",
+          "legendFormat": "P99"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max", "mean"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "gradientMode": "opacity", "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 17,
+      "title": "Latency Heatmap",
+      "description": "Request duration distribution over time. Dark = many requests, bright = high concentration. Use to spot bimodal distributions and latency spikes.",
+      "type": "heatmap",
+      "gridPos": { "x": 0, "y": 30, "w": 24, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (le)(rate({__name__=~\".+_http_request_duration_seconds_bucket\", job=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{le}}",
+          "format": "heatmap"
+        }
+      ],
+      "options": {
+        "calculate": false,
+        "yAxis": { "unit": "s", "decimals": 0 },
+        "color": {
+          "mode": "scheme",
+          "scheme": "Oranges",
+          "steps": 64,
+          "fill": "dark-orange",
+          "exponent": 0.5
+        },
+        "filterValues": { "le": 1e-9 },
+        "tooltip": { "show": true, "yHistogram": false },
+        "exemplars": { "color": "rgba(255,0,255,0.7)" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "scaleDistribution": { "type": "log", "log": 2 }
+          }
+        }
+      }
+    },
+
+    {
+      "id": 18,
+      "type": "row",
+      "title": "Endpoint Diagnostics",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 38, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 19,
+      "title": "Request Rate per Endpoint",
+      "description": "Per-endpoint traffic breakdown. Helps identify unexpected hot paths.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 39, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (path)(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[$__rate_interval]))",
+          "legendFormat": "{{path}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 5, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 20,
+      "title": "Error Rate per Endpoint",
+      "description": "Per-endpoint 5xx error rate. Zero is the goal for every endpoint.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 39, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (path)(rate({__name__=~\".+_http_requests_total\", job=\"$service\", status=~\"5..\"}[$__rate_interval]))",
+          "legendFormat": "{{path}}"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 1, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 21,
+      "title": "Status Code Breakdown",
+      "description": "Request count per endpoint × status code over the selected time range.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 47, "w": 24, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sort_desc(sum by (path, status)(rate({__name__=~\".+_http_requests_total\", job=\"$service\"}[5m])))",
+          "legendFormat": "{{path}} — {{status}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "path": "Endpoint", "status": "Status", "Value": "req/s" },
+            "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true }
+          }
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [{ "displayName": "req/s", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Status" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "range", "options": { "from": 200, "to": 299, "result": { "color": "green" } } },
+                  { "type": "range", "options": { "from": 400, "to": 499, "result": { "color": "yellow" } } },
+                  { "type": "range", "options": { "from": 500, "to": 599, "result": { "color": "red" } } }
+                ]
+              },
+              { "id": "custom.displayMode", "value": "color-text" }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 22,
+      "type": "row",
+      "title": "Go Runtime",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 54, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 23,
+      "title": "Goroutines",
+      "description": "Active goroutine count. Sudden spikes = goroutine leak.",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "go_goroutines{job=\"$service\"}",
+          "legendFormat": "goroutines"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red",    "value": 2000 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 24,
+      "title": "GC Rate",
+      "description": "Garbage collections per second. High rate = memory pressure.",
+      "type": "stat",
+      "gridPos": { "x": 4, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(go_gc_duration_seconds_count{job=\"$service\"}[5m])",
+          "legendFormat": "GC/s"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red",    "value": 20 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 25,
+      "title": "Heap Allocated",
+      "description": "Live heap bytes allocated. Subtract from HeapSys to see fragmentation.",
+      "type": "stat",
+      "gridPos": { "x": 8, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "go_memstats_heap_alloc_bytes{job=\"$service\"}",
+          "legendFormat": "heap"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 104857600 },
+              { "color": "red",    "value": 524288000 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 26,
+      "title": "Memory RSS",
+      "description": "OS-reported Resident Set Size including heap, stack, and shared libs.",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "process_resident_memory_bytes{job=\"$service\"}",
+          "legendFormat": "RSS"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 209715200 },
+              { "color": "red",    "value": 1073741824 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 27,
+      "title": "CPU Usage",
+      "description": "CPU seconds consumed per second (1.0 = one full core).",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(process_cpu_seconds_total{job=\"$service\"}[1m])",
+          "legendFormat": "CPU"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red",    "value": 0.9 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 28,
+      "title": "Open File Descriptors",
+      "description": "Open FDs. Near-limit = risk of EMFILE errors. Linux default: 1024 per process.",
+      "type": "stat",
+      "gridPos": { "x": 20, "y": 55, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "process_open_fds{job=\"$service\"}",
+          "legendFormat": "FDs"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red",    "value": 900 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 29,
+      "title": "Goroutines & GC Rate",
+      "description": "Goroutine count vs GC frequency. Correlate GC spikes with latency spikes.",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 59, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "go_goroutines{job=\"$service\"}",
+          "legendFormat": "Goroutines"
+        },
+        {
+          "expr": "rate(go_gc_duration_seconds_count{job=\"$service\"}[$__rate_interval]) * 100",
+          "legendFormat": "GC/s ×100"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 30,
+      "title": "Heap & Memory",
+      "description": "Heap allocation vs resident memory. A large gap = fragmentation or Go runtime overhead.",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 59, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "go_memstats_heap_alloc_bytes{job=\"$service\"}",
+          "legendFormat": "Heap Alloc"
+        },
+        {
+          "expr": "process_resident_memory_bytes{job=\"$service\"}",
+          "legendFormat": "Memory RSS"
+        }
+      ],
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" }
+        }
+      }
+    },
+
+    {
+      "id": 31,
+      "type": "row",
+      "title": "Incident Signals",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 66, "w": 24, "h": 1 }
+    },
+
+    {
+      "id": 32,
+      "title": "Active Alerts",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 67, "w": 4, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "alerts"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red",   "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 33,
+      "title": "Firing Alerts",
+      "type": "table",
+      "gridPos": { "x": 4, "y": 67, "w": 20, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "ALERTS{alertstate=\"firing\"}",
+          "legendFormat": "{{alertname}}",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "renameByName": { "alertname": "Alert", "severity": "Severity", "alertstate": "State" },
+            "excludeByName": { "Time": true, "__name__": true, "Value": true, "instance": true, "environment": true, "cluster": true }
+          }
+        }
+      ],
+      "options": { "showHeader": true },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "left" } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Severity" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  { "type": "value", "options": {
+                    "critical": { "text": "CRITICAL", "color": "red",    "index": 0 },
+                    "warning":  { "text": "WARNING",  "color": "yellow", "index": 1 }
+                  }}
+                ]
+              },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          }
+        ]
+      }
+    },
+
+    {
+      "id": 34,
+      "title": "Service Logs — $service",
+      "description": "Live logs from this service. Click trace_id to jump to Jaeger. Filter by level using the search bar above.",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 71, "w": 16, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki" },
+          "expr": "{job=\"$service\"} | json",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "dedupStrategy": "none",
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    },
+
+    {
+      "id": 35,
+      "title": "Traces — $service",
+      "description": "Distributed traces from Jaeger. Click a trace to drill into spans. Linked from log lines via trace_id.",
+      "type": "traces",
+      "gridPos": { "x": 16, "y": 71, "w": 8, "h": 8 },
+      "datasource": { "type": "jaeger", "uid": "jaeger" },
+      "targets": [
+        {
+          "datasource": { "type": "jaeger", "uid": "jaeger" },
+          "queryType": "search",
+          "service": "$service",
+          "refId": "A"
+        }
+      ],
+      "options": {}
+    }
+
+  ]
+}

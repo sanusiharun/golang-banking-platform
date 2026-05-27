@@ -1,0 +1,9 @@
+apiVersion: v2
+name: account-svc
+description: Core Banking Account Service
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+maintainers:
+  - name: platform-engineering
+    email: platform@bank.internal

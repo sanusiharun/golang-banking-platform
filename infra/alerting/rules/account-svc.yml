@@ -1,0 +1,77 @@
+groups:
+  - name: account-svc
+    interval: 15s   # how often these rules are evaluated
+    rules:
+
+      # ── 1. Service Down ───────────────────────────────────────────────────────
+      # Fires when Prometheus cannot scrape account-svc for 1 minute.
+      # This catches crashes, OOM kills, and network partitions all at once.
+      - alert: AccountSvcDown
+        expr: up{job="account-svc"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: account-svc
+          team: platform
+        annotations:
+          summary: "account-svc is unreachable"
+          description: "Prometheus cannot scrape account-svc. The service may be crashed or OOM-killed."
+          runbook: "https://wiki.internal/runbooks/account-svc-down"
+
+      # ── 2. High Error Rate ────────────────────────────────────────────────────
+      # Fires when 5xx responses exceed 5% of total traffic over 2 minutes.
+      # Threshold 0.05 = 5%. Lower to 0.01 for stricter SLO (99% success).
+      - alert: AccountSvcHighErrorRate
+        expr: |
+          (
+            rate(account_svc_http_requests_total{status=~"5.."}[5m])
+            /
+            rate(account_svc_http_requests_total[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: account-svc
+          team: platform
+        annotations:
+          summary: "account-svc error rate above 5%"
+          description: >
+            5xx error rate is {{ printf "%.2f" $value | humanizePercentage }} over the last 5 minutes.
+            This exceeds the 5% SLO threshold.
+          runbook: "https://wiki.internal/runbooks/account-svc-errors"
+
+      # ── 3. High P90 Latency ───────────────────────────────────────────────────
+      # Fires when the 90th-percentile response time exceeds 1 second.
+      # account_svc_http_request_duration_seconds is in seconds (Prometheus standard).
+      - alert: AccountSvcHighLatency
+        expr: |
+          histogram_quantile(
+            0.90,
+            rate(account_svc_http_request_duration_seconds_bucket[5m])
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+          service: account-svc
+          team: platform
+        annotations:
+          summary: "account-svc P90 latency above 1s"
+          description: >
+            P90 request latency is {{ printf "%.2f" $value }}s over the last 5 minutes.
+            Investigate slow DB queries, downstream timeouts, or resource saturation.
+          runbook: "https://wiki.internal/runbooks/account-svc-latency"
+
+      # ── 4. High In-Flight Requests ────────────────────────────────────────────
+      # Early warning: goroutine pressure building before latency spikes appear.
+      - alert: AccountSvcHighInFlight
+        expr: sum(account_svc_http_requests_in_flight) > 50
+        for: 1m
+        labels:
+          severity: warning
+          service: account-svc
+          team: platform
+        annotations:
+          summary: "account-svc has >50 in-flight requests"
+          description: >
+            {{ $value }} requests are currently in-flight. This may indicate a downstream
+            bottleneck (DB pool exhaustion, slow dependency) causing request pile-up.

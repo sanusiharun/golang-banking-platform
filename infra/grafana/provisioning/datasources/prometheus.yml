@@ -1,0 +1,60 @@
+apiVersion: 1
+
+datasources:
+  # ── Prometheus — metrics ──────────────────────────────────────────────────
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+
+  # ── Alertmanager — active alerts, silences, receivers ────────────────────
+  # Grafana → Alerting → Alerts (contact points, alert groups, silences)
+  - name: Alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: true
+    jsonData:
+      implementation: prometheus   # tells Grafana this is a Prometheus-compatible AM
+
+  # ── Loki — logs ──────────────────────────────────────────────────────────
+  # Grafana → Explore → select Loki → search by service, level, or any field
+  - name: Loki
+    type: loki
+    uid: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      derivedFields:
+        # Clicking trace_id in a log line jumps to Jaeger trace
+        - name: trace_id
+          matcherRegex: '"trace_id":"(\w+)"'
+          url: http://localhost:16686/trace/$${__value.raw}
+          datasourceUid: jaeger
+
+  # ── Jaeger — distributed traces ──────────────────────────────────────────
+  # Grafana → Explore → select Jaeger → search by service / trace ID
+  # Clicking a span opens the correlated Loki log lines for the same trace_id
+  - name: Jaeger
+    type: jaeger
+    uid: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    editable: true
+    jsonData:
+      tracesToLogsV2:
+        datasourceUid: loki           # trace span → Loki logs (same trace_id)
+        spanStartTimeShift: "-1m"
+        spanEndTimeShift: "1m"
+        tags:
+          - key: "job"                # propagate job label into the log query
+        filterByTraceID: true
+        filterBySpanID: false
+        customQuery: false

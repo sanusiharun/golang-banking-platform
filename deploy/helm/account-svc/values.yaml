@@ -1,0 +1,91 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/sanusi/banking/account-svc
+  pullPolicy: IfNotPresent
+  tag: ""  # Overridden by CI using image digest
+
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /healthz/live
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz/ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  failureThreshold: 3
+
+env:
+  ENVIRONMENT: production
+  SERVICE_NAME: account-svc
+  HTTP_PORT: "8080"
+  LOG_LEVEL: info
+  LOG_PRETTY: "false"
+  OTEL_ENABLED: "true"
+  RATE_LIMIT_RPS: "1000"
+  RATE_LIMIT_BURST: "2000"
+
+envFromSecret:
+  - name: DB_HOST
+    secretKey: db-host
+  - name: DB_PASSWORD
+    secretKey: db-password
+  - name: JWT_SECRET
+    secretKey: jwt-secret
+
+secretName: account-svc-secrets
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  hosts:
+    - host: account-svc.bank.internal
+      paths:
+        - path: /
+          pathType: Prefix
+
+nodeSelector: {}
+tolerations: []
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - account-svc
+          topologyKey: kubernetes.io/hostname
