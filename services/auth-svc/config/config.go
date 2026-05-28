@@ -38,9 +38,17 @@ type Config struct {
 
 	// JWT — auth-svc holds the PRIVATE key for signing.
 	// Other services receive only the PUBLIC key.
-	JWTPrivateKeyB64 string        // base64-encoded PKCS#8 PEM private key
-	JWTIssuer        string
-	JWTTokenTTL      time.Duration
+	JWTPrivateKeyB64       string        // base64-encoded PKCS#8 PEM private key
+	JWTIssuer              string
+	AccessTokenTTL         time.Duration // default 15m
+	RefreshTokenTTL        time.Duration // default 168h (7 days)
+	JWTSubjectKeyB64       string        // base64-encoded AES-256 key for encrypting Subject claim
+	BCryptCost             int           // bcrypt work factor (default 12)
+
+	// Token store
+	TokenStore    string // "postgres" | "redis" | "memory"
+	RedisAddr     string
+	RedisPassword string
 
 	// Observability
 	OTelEnabled      bool
@@ -73,9 +81,15 @@ func Load() (*Config, error) {
 		DBMaxConns:       getEnvInt("DB_MAX_CONNS", 10),
 		DBMinConns:       getEnvInt("DB_MIN_CONNS", 2),
 		DBLogLevel:       getEnv("DB_LOG_LEVEL", "silent"),
-		JWTPrivateKeyB64: getEnv("JWT_PRIVATE_KEY_B64", ""),
-		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
-		JWTTokenTTL:      getEnvDuration("JWT_TOKEN_TTL", 24*time.Hour),
+		JWTPrivateKeyB64:       getEnv("JWT_PRIVATE_KEY_B64", ""),
+		JWTIssuer:              getEnv("JWT_ISSUER", "banking-platform"),
+		AccessTokenTTL:         getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:        getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		JWTSubjectKeyB64:       getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
+		BCryptCost:             getEnvInt("BCRYPT_COST", 12),
+		TokenStore:             getEnv("TOKEN_STORE", "postgres"),
+		RedisAddr:              getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:          getEnv("REDIS_PASSWORD", ""),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
 		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),
 		OTelEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

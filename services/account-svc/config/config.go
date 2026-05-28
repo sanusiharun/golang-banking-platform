@@ -44,8 +44,9 @@ type Config struct {
 
 	// Auth — account-svc holds ONLY the public key for RS256 verification.
 	// Token issuance (and the private key) lives exclusively in auth-svc.
-	JWTPublicKeyB64 string // base64-encoded PKIX PEM public key
-	JWTIssuer       string
+	JWTPublicKeyB64  string // base64-encoded PKIX PEM public key
+	JWTIssuer        string
+	JWTSubjectKeyB64 string // base64-encoded AES-256 key for decrypting Subject claim
 
 	// Rate limiting
 	RateLimitRPS   int
@@ -96,8 +97,9 @@ func Load() (*Config, error) {
 		DBMaxConns:       getEnvInt("DB_MAX_CONNS", 25),
 		DBMinConns:       getEnvInt("DB_MIN_CONNS", 5),
 		DBLogLevel:       getEnv("DB_LOG_LEVEL", "silent"),
-		JWTPublicKeyB64: getEnv("JWT_PUBLIC_KEY_B64", ""),
-		JWTIssuer:       getEnv("JWT_ISSUER", "banking-platform"),
+		JWTPublicKeyB64:  getEnv("JWT_PUBLIC_KEY_B64", ""),
+		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
+		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
 		RateLimitRPS:     getEnvInt("RATE_LIMIT_RPS", 1000),
 		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),

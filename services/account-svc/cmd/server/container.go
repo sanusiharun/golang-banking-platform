@@ -48,6 +48,17 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("parse JWT public key: %w", err)
 	}
 
+	// ── Subject decryption key ─────────────────────────────────────────────────
+	subjectKey, err := decodeBase64Key(cfg.JWTSubjectKeyB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode subject encryption key: %w", err)
+	}
+
+	// ── Migrations ────────────────────────────────────────────────────────────
+	if err := runMigrations(cfg); err != nil {
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+
 	// ── Database ──────────────────────────────────────────────────────────────
 	db, err := database.New(&database.Config{
 		Host:         cfg.DBHost,
@@ -81,8 +92,9 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		AccountHandler: accountHandler,
 		Health:         health,
 		JWTConfig: pkgmiddleware.JWTConfig{
-			PublicKey: publicKey,
-			Issuer:    cfg.JWTIssuer,
+			PublicKey:  publicKey,
+			Issuer:     cfg.JWTIssuer,
+			SubjectKey: subjectKey,
 		},
 		RateLimitRPS:   cfg.RateLimitRPS,
 		RateLimitBurst: cfg.RateLimitBurst,
@@ -100,6 +112,22 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	return &container{server: server, otel: otelProvider}, nil
+}
+
+// decodeBase64Key decodes a standard base64-encoded AES key from an env var.
+// Returns nil (no error) when the value is empty — callers treat nil as "no encryption".
+func decodeBase64Key(b64 string) ([]byte, error) {
+	if b64 == "" {
+		return nil, nil
+	}
+	key, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("subject key must be 32 bytes (AES-256), got %d", len(key))
+	}
+	return key, nil
 }
 
 // parsePublicKey decodes a base64-encoded PKIX PEM public key.

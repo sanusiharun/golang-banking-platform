@@ -7,9 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
+	"gorm.io/gorm"
 
 	"github.com/sanusi/banking/pkg/database"
 	"github.com/sanusi/banking/pkg/observability"
@@ -45,6 +48,17 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("parse JWT private key: %w", err)
 	}
 
+	// ── Subject encryption key ────────────────────────────────────────────────
+	subjectKey, err := decodeBase64Key(cfg.JWTSubjectKeyB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode subject encryption key: %w", err)
+	}
+
+	// ── Migrations ────────────────────────────────────────────────────────────
+	if err := runMigrations(cfg); err != nil {
+		return nil, fmt.Errorf("run migrations: %w", err)
+	}
+
 	// ── Database ──────────────────────────────────────────────────────────────
 	db, err := database.New(&database.Config{
 		Host:         cfg.DBHost,
@@ -61,14 +75,20 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
+	// ── Token store (pluggable: postgres | redis | memory) ────────────────────
+	tokenStore, redisClient := buildTokenStore(cfg, db)
+
 	// ── Wiring ────────────────────────────────────────────────────────────────
 	userRepo := repository.NewUserRepository(db)
 	validate := validator.New()
 
-	authSvc := services.NewAuthService(userRepo, services.AuthConfig{
-		PrivateKey: privateKey,
-		Issuer:     cfg.JWTIssuer,
-		TokenTTL:   cfg.JWTTokenTTL,
+	authSvc := services.NewAuthService(userRepo, tokenStore, services.AuthConfig{
+		PrivateKey:           privateKey,
+		Issuer:               cfg.JWTIssuer,
+		AccessTokenTTL:       cfg.AccessTokenTTL,
+		RefreshTokenTTL:      cfg.RefreshTokenTTL,
+		SubjectEncryptionKey: subjectKey,
+		BCryptCost:           cfg.BCryptCost,
 	})
 
 	authHandler := transport.NewAuthHandler(authSvc, validate)
@@ -78,12 +98,20 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	health.Register("postgres", func(hctx context.Context) error {
 		return database.HealthCheck(hctx, db)
 	})
+	if redisClient != nil {
+		health.Register("redis", func(hctx context.Context) error {
+			return redisClient.Ping(hctx).Err()
+		})
+	}
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	router := transport.NewRouter(transport.RouterConfig{
 		AuthHandler: authHandler,
 		Health:      health,
 		Environment: cfg.Environment,
+		PublicKey:   &privateKey.PublicKey,
+		SubjectKey:  subjectKey,
+		Issuer:      cfg.JWTIssuer,
 	})
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
@@ -96,6 +124,49 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	return &container{server: server, otel: otelProvider}, nil
+}
+
+// buildTokenStore selects a TokenStore implementation based on cfg.TokenStore.
+// It returns the store and, if Redis is used, the *redis.Client so it can be
+// registered as a health-check target. A nil *redis.Client means Redis is not used.
+func buildTokenStore(cfg *svcconfig.Config, db *gorm.DB) (repository.TokenStore, *redis.Client) {
+	switch cfg.TokenStore {
+	case "redis":
+		client := redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+		})
+		slog.Info("token store: redis", slog.String("addr", cfg.RedisAddr))
+		return repository.NewRedisTokenStore(client, cfg.RefreshTokenTTL), client
+
+	case "memory":
+		slog.Warn("token store: in-memory (not suitable for production)")
+		return repository.NewMemoryTokenStore(), nil
+
+	default: // "postgres" or anything unrecognised
+		if cfg.TokenStore != "postgres" {
+			slog.Warn("token store: unknown value, falling back to postgres",
+				slog.String("value", cfg.TokenStore))
+		}
+		slog.Info("token store: postgres")
+		return repository.NewPostgresTokenStore(db), nil
+	}
+}
+
+// decodeBase64Key decodes a standard base64-encoded AES key from an env var.
+// Returns nil (no error) when the value is empty — callers treat nil as "no encryption".
+func decodeBase64Key(b64 string) ([]byte, error) {
+	if b64 == "" {
+		return nil, nil
+	}
+	key, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("base64 decode: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("subject key must be 32 bytes (AES-256), got %d", len(key))
+	}
+	return key, nil
 }
 
 // parsePrivateKey decodes a base64-encoded PKCS#8 PEM private key.
