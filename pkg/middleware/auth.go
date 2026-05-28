@@ -8,30 +8,39 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	pkgcrypto "github.com/sanusi/banking/pkg/crypto"
 )
 
 type claimsKey struct{}
 
 // Claims holds the parsed JWT payload used for RBAC decisions.
-// This struct is populated by auth-svc (signing) and read by every other
-// service (verification). The shape must stay in sync across both sides.
+//
+// Layout:
+//   - jwt.RegisteredClaims is embedded so all standard fields (sub, iss, exp, iat)
+//     appear inline in the JWT JSON — no nesting.
+//   - UserID is NOT serialised into the JWT (json:"-"). It is populated by the
+//     Authenticate middleware after decrypting RegisteredClaims.Subject.
+//     Callers should always read UserID, never Subject directly.
+//   - TenantID and Roles travel as custom claims inside the token.
 type Claims struct {
-	UserID   string   `json:"sub"`
-	TenantID string   `json:"tenant_id"`
+	jwt.RegisteredClaims            // Subject = AES-256-GCM encrypted user ID
+	UserID   string `json:"-"`      // decrypted user ID — set by middleware, not in JWT
+	TenantID string `json:"tenant_id"`
 	Roles    []string `json:"roles"`
-	jwt.RegisteredClaims
 }
 
 // JWTConfig holds JWT validation parameters for RS256.
-// PublicKey is the RSA public key issued by auth-svc.
-// All services receive only the public key — the private key never leaves auth-svc.
 type JWTConfig struct {
-	PublicKey *rsa.PublicKey
-	Issuer    string
+	PublicKey  *rsa.PublicKey
+	Issuer     string
+	SubjectKey []byte // AES-256 key (32 bytes) for decrypting Subject claim.
+	            	   // If empty, Subject is used as-is (no encryption).
 }
 
 // Authenticate validates a Bearer token using RS256 and injects Claims into context.
-// The token must have been signed by auth-svc using its RSA private key.
+// If JWTConfig.SubjectKey is set, the Subject claim is decrypted and stored in
+// Claims.UserID — all downstream handlers receive the plaintext user ID transparently.
 func Authenticate(cfg JWTConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,6 +67,22 @@ func Authenticate(cfg JWTConfig) func(http.Handler) http.Handler {
 				)
 				writeAuthError(w, "UNAUTHORIZED", "invalid or expired token", http.StatusUnauthorized)
 				return
+			}
+
+			// Decrypt Subject → UserID.
+			// If no key is configured, treat Subject as plaintext (backwards compatible).
+			if len(cfg.SubjectKey) > 0 {
+				userID, err := pkgcrypto.DecryptSubject(cfg.SubjectKey, claims.Subject)
+				if err != nil {
+					slog.WarnContext(r.Context(), "failed to decrypt token subject",
+						slog.String("error", err.Error()),
+					)
+					writeAuthError(w, "UNAUTHORIZED", "invalid token subject", http.StatusUnauthorized)
+					return
+				}
+				claims.UserID = userID
+			} else {
+				claims.UserID = claims.Subject
 			}
 
 			ctx := context.WithValue(r.Context(), claimsKey{}, claims)
@@ -100,6 +125,17 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 	c, ok := ctx.Value(claimsKey{}).(*Claims)
 	return c, ok && c != nil
+}
+
+// UserIDFromContext returns the decrypted user ID from the request context.
+// The Authenticate middleware decrypts the JWT Subject transparently, so this
+// always returns the plaintext user ID — callers never deal with encryption.
+// Returns an empty string if no auth context is present.
+func UserIDFromContext(ctx context.Context) string {
+	if c, ok := ClaimsFromContext(ctx); ok {
+		return c.UserID
+	}
+	return ""
 }
 
 func extractBearer(r *http.Request) string {
