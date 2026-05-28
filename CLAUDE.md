@@ -323,10 +323,10 @@ Each service has its own PostgreSQL database and a dedicated PostgreSQL user. Cr
 
 ```bash
 # Start Postgres (via Docker Compose or locally)
-make infra-up
+make monitoring-up
 
 # Create databases and users
-psql -h localhost -U admin -d postgres -f infra/postgres/setup.sql
+psql -h localhost -U admin -d postgres -f monitoring/postgres/setup.sql
 
 # Run migrations per service
 psql -h localhost -U auth_svc -d banking_auth \
@@ -417,7 +417,7 @@ base64 -w0 public.pem          # → JWT_PUBLIC_KEY_B64  in account-svc/.env (an
 ### Step 1 — Start observability infrastructure
 
 ```bash
-make infra-up
+make monitoring-up
 ```
 
 This starts: Postgres, Jaeger, Prometheus, Alertmanager, Grafana, Loki, Promtail.
@@ -428,7 +428,7 @@ Wait ~10 seconds for all services to be healthy.
 
 ```bash
 # Create databases and users
-psql -h localhost -U admin -d postgres -f infra/postgres/setup.sql
+psql -h localhost -U admin -d postgres -f monitoring/postgres/setup.sql
 
 # Run migrations
 psql -h localhost -U auth_svc -d banking_auth \
@@ -726,8 +726,8 @@ There are two Compose files, intentionally separated:
 Contains: Postgres, Jaeger, Prometheus, Alertmanager, Grafana, Loki, Promtail.
 
 ```bash
-make infra-up    # start
-make infra-down  # stop
+make monitoring-up    # start
+make monitoring-down  # stop
 ```
 
 ### `docker-compose.yml` — Microservices
@@ -945,7 +945,7 @@ In `prometheus.yml`:
   scrape_interval: 10s
   metrics_path: /metrics
   static_configs:
-    - targets: ["host.docker.internal:8083"]
+    - targets: ["host.datasource.internal:8083"]
       labels:
         service: payment-svc
         team: platform

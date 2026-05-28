@@ -1,4 +1,4 @@
-.PHONY: build test lint generate docker-up docker-down infra-up infra-down infra-logs services-up services-down services-logs migrate tidy fmt proto help
+.PHONY: build test lint generate datasource-up datasource-down datasource-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate tidy fmt proto help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -63,18 +63,28 @@ proto: ## Generate Go code from .proto files (requires protoc + protoc-gen-go)
 			--go-grpc_opt=paths=source_relative \
 			{} \;
 
-# ─── Docker — infrastructure (Jaeger, Prometheus, Alertmanager, Grafana) ──────
-infra-up: ## Start observability infrastructure
+# ─── Datasource — shared databases (MySQL, PostgreSQL, MongoDB, Redis) ────────
+datasource-up: ## Start shared database stack
+	docker compose -f datasource/docker-compose.yml up -d
+
+datasource-down: ## Stop shared database stack
+	docker compose -f datasource/docker-compose.yml down
+
+datasource-logs: ## Tail datasource logs
+	docker compose -f datasource/docker-compose.yml logs -f
+
+# ─── Monitoring — observability infrastructure (Jaeger, Prometheus, Alertmanager, Grafana) ──────
+monitoring-up: ## Start observability infrastructure
 	docker compose -f docker-compose.infra.yml up -d
 
-infra-down: ## Stop observability infrastructure
+monitoring-down: ## Stop observability infrastructure
 	docker compose -f docker-compose.infra.yml down
 
-infra-logs: ## Tail infra logs
+monitoring-logs: ## Tail monitoring logs
 	docker compose -f docker-compose.infra.yml logs -f
 
-# ─── Docker — microservices ────────────────────────────────────────────────────
-services-up: ## Build and start all microservices (requires infra-up first)
+# ─── Microservices ────────────────────────────────────────────────────────────
+services-up: ## Build and start all microservices (requires datasource-up + monitoring-up first)
 	docker compose up -d --build
 
 services-down: ## Stop all microservices
@@ -83,12 +93,13 @@ services-down: ## Stop all microservices
 services-logs: ## Tail microservice logs
 	docker compose logs -f
 
-# ─── Docker — full stack ───────────────────────────────────────────────────────
-docker-up: infra-up services-up ## Start everything (infra + microservices)
+# ─── Full stack ───────────────────────────────────────────────────────────────
+stack-up: datasource-up monitoring-up services-up ## Start everything (datasource + monitoring + microservices)
 
-docker-down: ## Stop everything
+stack-down: ## Stop everything
 	docker compose down
 	docker compose -f docker-compose.infra.yml down
+	docker compose -f datasource/docker-compose.yml down
 
 # ─── Database ─────────────────────────────────────────────────────────────────
 migrate: ## Apply SQL migrations (requires psql in PATH and DB vars set)

@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Promtail — dual-mode log collector
 #
-# MODE A — Docker containers (when running via docker compose up):
+# MODE A — Docker containers (when running via datasource compose up):
 #   Discovers banking-* containers via Docker socket.
 #
 # MODE B — Local processes (when running via go run / make run):
@@ -30,9 +30,9 @@ scrape_configs:
   # MODE A: Docker container log discovery
   # Picks up any container whose name starts with "banking-"
   # ────────────────────────────────────────────────────────────────────────────
-  - job_name: banking-docker
+  - job_name: banking-datasource
     docker_sd_configs:
-      - host: unix:///var/run/docker.sock
+      - host: unix:///var/run/datasource.sock
         refresh_interval: 5s
         filters:
           - name: name

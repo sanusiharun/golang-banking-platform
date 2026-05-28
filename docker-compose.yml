@@ -1,7 +1,7 @@
-# docker-compose.yml — microservices stack.
+# datasource-compose.yml — microservices stack.
 #
 # Contains: all banking platform microservices
-# Requires: infra stack running first (make infra-up)
+# Requires: monitoring stack running first (make monitoring-up)
 #
 # NOTE: PostgreSQL is NOT managed here.
 # Use your existing Docker Desktop postgres-db container (localhost:5432).
@@ -12,7 +12,7 @@
 
 networks:
   banking-net:
-    external: true   # created by docker-compose.infra.yml
+    external: true   # created by datasource-compose.monitoring.yml
 
 services:
 
