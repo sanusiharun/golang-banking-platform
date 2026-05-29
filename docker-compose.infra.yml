@@ -78,6 +78,26 @@ services:
       - banking-net
 
   # ──────────────────────────────────────────────────────────────────────────
+  # alertmanager-discord — translates Alertmanager webhook → Discord embed
+  #
+  # Alertmanager cannot speak Discord's API format natively.
+  # This tiny proxy sits between them:
+  #   Alertmanager → http://alertmanager-discord:9094/alert → Discord webhook
+  #
+  # Set DISCORD_WEBHOOK_URL in root .env (copy from Discord channel settings).
+  # ──────────────────────────────────────────────────────────────────────────
+  alertmanager-discord:
+    image: benjojo/alertmanager-discord:latest
+    container_name: banking-alertmanager-discord
+    restart: unless-stopped
+    environment:
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
+    ports:
+      - "9094:9094"
+    networks:
+      - banking-net
+
+  # ──────────────────────────────────────────────────────────────────────────
   # Alertmanager — alert routing, deduplication, silencing
   # UI:  http://localhost:9093
   # ──────────────────────────────────────────────────────────────────────────

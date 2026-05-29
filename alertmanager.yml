@@ -1,55 +1,50 @@
 global:
-  # How long to wait before re-sending an alert that has already been sent.
   resolve_timeout: 5m
 
 # ── Routing tree ──────────────────────────────────────────────────────────────
-# Alerts flow: root route → first matching child route → receiver.
-# The "catch-all" receiver here is a no-op (null) — alerts still appear in the
-# Alertmanager UI at http://localhost:9093. Wire real receivers (Slack, PagerDuty,
-# email) by adding receivers below and routing to them.
+#
+# Flow: alert fires → Alertmanager → alertmanager-discord proxy → Discord webhook
+# The proxy (benjojo/alertmanager-discord) translates Alertmanager JSON → Discord embed format.
+#
 route:
   group_by: ["alertname", "service"]
-  group_wait: 30s       # wait to batch alerts in the same group
-  group_interval: 5m    # how often to resend firing group
-  repeat_interval: 4h   # how often to re-notify if still firing
-
-  receiver: "null"      # default: show in UI, no external notification
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: "discord-warning"
 
   routes:
-    # Critical alerts: fire immediately, re-notify every hour
+    # Critical — fire fast, re-notify every hour
     - matchers:
         - severity = "critical"
-      receiver: "null"        # swap with "slack-critical" or "pagerduty" when ready
+      receiver: "discord-critical"
       group_wait: 10s
       repeat_interval: 1h
 
-    # Warning alerts: standard cadence
+    # Warning — standard cadence
     - matchers:
         - severity = "warning"
-      receiver: "null"
+      receiver: "discord-warning"
       repeat_interval: 4h
 
 # ── Receivers ─────────────────────────────────────────────────────────────────
+#
+# Alertmanager sends to alertmanager-discord (container on banking-net).
+# That proxy reformats the payload and forwards to Discord's webhook API.
+#
 receivers:
-  # null receiver — alerts show up in the Alertmanager UI without any external
-  # notification. Replace or supplement with real receivers:
-  #
-  #   slack-critical:
-  #     slack_configs:
-  #       - api_url: "https://hooks.slack.com/services/..."
-  #         channel: "#alerts-critical"
-  #         title: "{{ .GroupLabels.alertname }}"
-  #         text: "{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}"
-  #
-  #   pagerduty:
-  #     pagerduty_configs:
-  #       - service_key: "<your-key>"
-  #
-  - name: "null"
+  - name: "discord-critical"
+    webhook_configs:
+      - url: "http://alertmanager-discord:9094/alert"
+        send_resolved: true
+
+  - name: "discord-warning"
+    webhook_configs:
+      - url: "http://alertmanager-discord:9094/alert"
+        send_resolved: true
 
 # ── Inhibition rules ──────────────────────────────────────────────────────────
-# Suppress warning-severity alerts when a critical alert for the same service
-# is already firing — prevents alert storms from a single root cause.
+# Suppress warnings when a critical for the same service is already firing.
 inhibit_rules:
   - source_matchers:
       - severity = "critical"
