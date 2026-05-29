@@ -2,7 +2,7 @@
 # Stage 1: Build
 # Uses Go 1.23 Alpine for a small build image.
 # ──────────────────────────────────────────────────────────────────────────────
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26-alpine AS builder
 
 # Install certificates for HTTPS calls during go mod download.
 RUN apk add --no-cache ca-certificates git tzdata
