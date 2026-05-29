@@ -20,9 +20,12 @@ dist/
 *.tar.gz
 
 # Environment files (NEVER commit secrets)
+# Each stack/service owns its own .env — none are committed.
 .env
 .env.*
 !.env.example
+services/auth-svc/.env
+services/account-svc/.env
 
 # IDE / editor
 .idea/

@@ -158,22 +158,22 @@ migrate: migrate-auth migrate-account ## Run ALL migrations (auth + account)
 run-account-svc: ## Run account-svc locally, tee logs to ./logs/account-svc.log
 	@mkdir -p logs
 	@echo "→ account-svc  http://localhost:8081  (logs → ./logs/account-svc.log)"
-	@set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -a; [ -f services/account-svc/.env ] && . ./services/account-svc/.env; set +a; \
 	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
 
 run-auth-svc: ## Run auth-svc locally, tee logs to ./logs/auth-svc.log
 	@mkdir -p logs
-	@echo "→ auth-svc  http://localhost:8082  (logs → ./logs/auth-svc.log)"
-	@set -a; [ -f .env ] && . ./.env; set +a; \
+	@echo "→ auth-svc  http://localhost:8080  (logs → ./logs/auth-svc.log)"
+	@set -a; [ -f services/auth-svc/.env ] && . ./services/auth-svc/.env; set +a; \
 	 cd services/auth-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log
 
 run-all: ## Run both services locally with log capture (opens two background processes)
 	@mkdir -p logs
 	@echo "→ Starting account-svc and auth-svc locally..."
 	@echo "→ Logs: ./logs/account-svc.log and ./logs/auth-svc.log"
-	@set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -a; [ -f services/auth-svc/.env ] && . ./services/auth-svc/.env; set +a; \
 	 cd services/auth-svc    && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log &
-	@set -a; [ -f .env ] && . ./.env; set +a; \
+	@set -a; [ -f services/account-svc/.env ] && . ./services/account-svc/.env; set +a; \
 	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
 
 logs-follow: ## Tail all local service logs
