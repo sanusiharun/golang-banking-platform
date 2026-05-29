@@ -33,10 +33,17 @@ datasources:
     editable: true
     jsonData:
       derivedFields:
-        # Clicking trace_id in a log line jumps to Jaeger trace
+        # Clicking trace_id in a log line opens the trace in the Jaeger datasource.
+        # url: "${__value.raw}" — tells Grafana to pass the regex-matched value
+        #   (the raw trace ID hex string) as the query to the linked datasource.
+        #   This is NOT an external URL — Grafana intercepts it and uses it as
+        #   the Jaeger TraceID query value.
+        # datasourceUid: jaeger — makes Grafana open the internal Jaeger panel
+        #   instead of navigating to an external URL.
+        # Both fields are required together for the button to pre-fill the trace ID.
         - name: trace_id
           matcherRegex: '"trace_id":"(\w+)"'
-          url: http://localhost:16686/trace/$${__value.raw}
+          url: "$${__value.raw}"
           datasourceUid: jaeger
 
   # ── Jaeger — distributed traces ──────────────────────────────────────────

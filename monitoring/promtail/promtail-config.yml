@@ -14,7 +14,7 @@
 server:
   http_listen_port: 9080
   grpc_listen_port: 0
-  log_level: warn
+  log_level: info
 
 positions:
   filename: /tmp/positions.yaml
@@ -32,7 +32,7 @@ scrape_configs:
   # ────────────────────────────────────────────────────────────────────────────
   - job_name: banking-datasource
     docker_sd_configs:
-      - host: unix:///var/run/datasource.sock
+      - host: unix:///var/run/docker.sock
         refresh_interval: 5s
         filters:
           - name: name
@@ -62,9 +62,8 @@ scrape_configs:
       - labels:
           level:
           trace_id:
-      - drop:
-          expression: '.*(GET /healthz|GET /metrics).*'
-          drop_counter_reason: healthcheck_noise
+      # Metrics/health paths are already suppressed in RequestLogger middleware.
+      # No drop stage needed here.
       - timestamp:
           source: time
           format: RFC3339Nano
@@ -98,9 +97,8 @@ scrape_configs:
       - labels:
           level:
           trace_id:
-      - drop:
-          expression: '.*(GET /healthz|GET /metrics).*'
-          drop_counter_reason: healthcheck_noise
+      # Metrics/health paths are already suppressed in RequestLogger middleware.
+      # No drop stage needed here.
       - timestamp:
           source: time
           format: RFC3339Nano

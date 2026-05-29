@@ -22,14 +22,14 @@ rule_files:
 scrape_configs:
 
   # account-svc
-  # • Local dev (make run):  target = host.datasource.internal:8081  ← current default
+  # • Local dev (make run):  target = host.docker.internal:8081  ← current default
   # • Full datasource-compose:   target = account-svc:8081
   # Change the target below to match how you're running the service.
   - job_name: "account-svc"
     scrape_interval: 10s
     metrics_path: /metrics
     static_configs:
-      - targets: ["host.datasource.internal:8081"]
+      - targets: ["host.docker.internal:8081"]
         labels:
           service: account-svc
           team: platform
@@ -39,20 +39,20 @@ scrape_configs:
     scrape_interval: 10s
     metrics_path: /metrics
     static_configs:
-      - targets: ["host.datasource.internal:8082"]
+      - targets: ["host.docker.internal:8082"]
         labels:
           service: auth-svc
           team: platform
 
   # ── Add new microservices here following the same pattern ────────────────
   # When running via datasource-compose:   target = {service-name}:{port}
-  # When running locally (make run):   target = host.datasource.internal:{port}
+  # When running locally (make run):   target = host.docker.internal:{port}
   #
   # - job_name: "payment-svc"
   #   scrape_interval: 10s
   #   metrics_path: /metrics
   #   static_configs:
-  #     - targets: ["host.datasource.internal:8082"]
+  #     - targets: ["host.docker.internal:8082"]
   #       labels:
   #         service: payment-svc
   #         team: platform
@@ -61,7 +61,7 @@ scrape_configs:
   #   scrape_interval: 10s
   #   metrics_path: /metrics
   #   static_configs:
-  #     - targets: ["host.datasource.internal:8083"]
+  #     - targets: ["host.docker.internal:8083"]
   #       labels:
   #         service: notification-svc
   #         team: platform
