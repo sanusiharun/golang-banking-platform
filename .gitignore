@@ -46,3 +46,6 @@ prometheus-data/
 
 # golangci-lint cache
 .golangci-lint-cache/
+
+# Datasource credentials
+datasource/.env
