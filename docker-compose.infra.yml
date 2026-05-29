@@ -88,8 +88,7 @@ services:
   # ──────────────────────────────────────────────────────────────────────────
   alertmanager-discord:
     build:
-      context: .
-      dockerfile: cmd/discord-relay/Dockerfile
+      context: ./cmd/discord-relay
     image: banking-discord-relay
     container_name: banking-alertmanager-discord
     restart: unless-stopped
