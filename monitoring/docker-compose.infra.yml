@@ -1,11 +1,13 @@
-# datasource-compose.monitoring.yml — observability infrastructure stack.
+# monitoring/docker-compose.infra.yml — observability infrastructure stack.
 #
 # Contains: Jaeger (traces), Prometheus (metrics), Alertmanager (alerts), Grafana (UI)
 # Does NOT contain any microservices — those live in datasource-compose.yml
 #
 # Start:    make monitoring-up
 # Stop:     make monitoring-down
-# Logs:     docker compose -f docker-compose.infra.yml logs -f
+# Logs:     docker compose -f monitoring/docker-compose.infra.yml logs -f
+#
+# .env is auto-loaded from this directory (monitoring/.env)
 
 networks:
   banking-net:
@@ -31,7 +33,7 @@ services:
     ports:
       - "3100:3100"
     volumes:
-      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
     command: -config.file=/etc/loki/loki-config.yml
     networks:
@@ -47,10 +49,10 @@ services:
     restart: unless-stopped
     user: root   # needed to read Docker socket on macOS Docker Desktop
     volumes:
-      - ./monitoring/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # MODE B: local log files written by "make run-*" targets
-      - ./logs:/var/log/banking:ro
+      - ../logs:/var/log/banking:ro
     command: -config.file=/etc/promtail/promtail-config.yml
     networks:
       - banking-net
@@ -84,11 +86,11 @@ services:
   # This tiny proxy sits between them:
   #   Alertmanager → http://alertmanager-discord:9094/alert → Discord webhook
   #
-  # Set DISCORD_WEBHOOK_URL in root .env (copy from Discord channel settings).
+  # Set DISCORD_WEBHOOK_URL in monitoring/.env
   # ──────────────────────────────────────────────────────────────────────────
   alertmanager-discord:
     build:
-      context: ./cmd/discord-relay
+      context: ../cmd/discord-relay
     image: banking-discord-relay
     container_name: banking-alertmanager-discord
     restart: unless-stopped
@@ -136,8 +138,8 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./monitoring/alerting/rules:/etc/prometheus/rules:ro
+      - ../prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./alerting/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     ports:
       - "9090:9090"
@@ -170,8 +172,8 @@ services:
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
-      - ./monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     ports:
       - "3000:3000"
     networks:

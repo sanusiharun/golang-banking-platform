@@ -75,13 +75,13 @@ datasource-logs: ## Tail datasource logs
 
 # ─── Monitoring — observability infrastructure (Jaeger, Prometheus, Alertmanager, Grafana) ──────
 monitoring-up: ## Start observability infrastructure
-	docker compose -f docker-compose.infra.yml up -d
+	docker compose -f monitoring/docker-compose.infra.yml up -d
 
 monitoring-down: ## Stop observability infrastructure
-	docker compose -f docker-compose.infra.yml down
+	docker compose -f monitoring/docker-compose.infra.yml down
 
 monitoring-logs: ## Tail monitoring logs
-	docker compose -f docker-compose.infra.yml logs -f
+	docker compose -f monitoring/docker-compose.infra.yml logs -f
 
 # ─── Microservices ────────────────────────────────────────────────────────────
 services-up: ## Build and start all microservices (requires datasource-up + monitoring-up first)
@@ -98,7 +98,7 @@ stack-up: datasource-up monitoring-up services-up ## Start everything (datasourc
 
 stack-down: ## Stop everything
 	docker compose down
-	docker compose -f docker-compose.infra.yml down
+	docker compose -f monitoring/docker-compose.infra.yml down
 	docker compose -f datasource/docker-compose.yml down
 
 # ─── Database migrations ──────────────────────────────────────────────────────

@@ -47,5 +47,6 @@ prometheus-data/
 # golangci-lint cache
 .golangci-lint-cache/
 
-# Datasource credentials
+# Stack-specific credentials (each folder owns its secrets)
 datasource/.env
+monitoring/.env
