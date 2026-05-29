@@ -1,8 +1,8 @@
-.PHONY: build test lint generate datasource-up datasource-down datasource-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate tidy fmt proto help
+.PHONY: build test lint generate datasource-up datasource-down datasource-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
-SERVICES    := services/account-svc
+SERVICES    := services/auth-svc services/account-svc
 PROTO_DIR   := proto
 
 # ─── Default ──────────────────────────────────────────────────────────────────
@@ -101,13 +101,51 @@ stack-down: ## Stop everything
 	docker compose -f docker-compose.infra.yml down
 	docker compose -f datasource/docker-compose.yml down
 
-# ─── Database ─────────────────────────────────────────────────────────────────
-migrate: ## Apply SQL migrations (requires psql in PATH and DB vars set)
-	@echo "→ Running migrations on $(DB_HOST):$(DB_PORT)/$(DB_NAME) ..."
-	@for f in services/account-svc/internal/infrastructure/postgres/migrations/*.sql; do \
+# ─── Database migrations ──────────────────────────────────────────────────────
+#
+# Reads credentials from CREDENTIALS.txt / root .env:
+#   auth-svc    → banking_auth     as auth_svc
+#   account-svc → banking_accounts as account_svc
+#
+# Runs every .sql file in the service migrations/ folder in alphabetical order.
+# Safe to re-run — wrap individual statements in IF NOT EXISTS where needed.
+# ─────────────────────────────────────────────────────────────────────────────
+
+AUTH_DB_HOST     ?= localhost
+AUTH_DB_PORT     ?= 5432
+AUTH_DB_NAME     ?= banking_auth
+AUTH_DB_USER     ?= auth_svc
+AUTH_DB_PASSWORD ?= auth_svc_pass_local
+
+ACCOUNT_DB_HOST     ?= localhost
+ACCOUNT_DB_PORT     ?= 5432
+ACCOUNT_DB_NAME     ?= banking_accounts
+ACCOUNT_DB_USER     ?= account_svc
+ACCOUNT_DB_PASSWORD ?= account_svc_pass_local
+
+migrate-auth: ## Run auth-svc SQL migrations against banking_auth
+	@echo "→ Migrating auth-svc → $(AUTH_DB_HOST):$(AUTH_DB_PORT)/$(AUTH_DB_NAME)"
+	@for f in $$(ls services/auth-svc/migrations/*.sql 2>/dev/null | sort); do \
 		echo "  Applying $$f ..."; \
-		PGPASSWORD=$(DB_PASSWORD) psql -h $(DB_HOST) -p $(DB_PORT) -U $(DB_USER) -d $(DB_NAME) -f $$f; \
+		PGPASSWORD=$(AUTH_DB_PASSWORD) psql \
+			-h $(AUTH_DB_HOST) -p $(AUTH_DB_PORT) \
+			-U $(AUTH_DB_USER) -d $(AUTH_DB_NAME) \
+			-f $$f || exit 1; \
 	done
+	@echo "✓ auth-svc migrations complete"
+
+migrate-account: ## Run account-svc SQL migrations against banking_accounts
+	@echo "→ Migrating account-svc → $(ACCOUNT_DB_HOST):$(ACCOUNT_DB_PORT)/$(ACCOUNT_DB_NAME)"
+	@for f in $$(ls services/account-svc/migrations/*.sql 2>/dev/null | sort); do \
+		echo "  Applying $$f ..."; \
+		PGPASSWORD=$(ACCOUNT_DB_PASSWORD) psql \
+			-h $(ACCOUNT_DB_HOST) -p $(ACCOUNT_DB_PORT) \
+			-U $(ACCOUNT_DB_USER) -d $(ACCOUNT_DB_NAME) \
+			-f $$f || exit 1; \
+	done
+	@echo "✓ account-svc migrations complete"
+
+migrate: migrate-auth migrate-account ## Run ALL migrations (auth + account)
 
 # ─── Local run (logs piped to ./logs/*.log for Promtail to scrape) ───────────
 #
@@ -120,19 +158,23 @@ migrate: ## Apply SQL migrations (requires psql in PATH and DB vars set)
 run-account-svc: ## Run account-svc locally, tee logs to ./logs/account-svc.log
 	@mkdir -p logs
 	@echo "→ account-svc  http://localhost:8081  (logs → ./logs/account-svc.log)"
-	cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
 
 run-auth-svc: ## Run auth-svc locally, tee logs to ./logs/auth-svc.log
 	@mkdir -p logs
 	@echo "→ auth-svc  http://localhost:8082  (logs → ./logs/auth-svc.log)"
-	cd services/auth-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	 cd services/auth-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log
 
 run-all: ## Run both services locally with log capture (opens two background processes)
 	@mkdir -p logs
 	@echo "→ Starting account-svc and auth-svc locally..."
 	@echo "→ Logs: ./logs/account-svc.log and ./logs/auth-svc.log"
-	cd services/auth-svc    && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log &
-	cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	 cd services/auth-svc    && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log &
+	@set -a; [ -f .env ] && . ./.env; set +a; \
+	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
 
 logs-follow: ## Tail all local service logs
 	@tail -f logs/*.log 2>/dev/null || echo "No log files yet. Run: make run-auth-svc or make run-account-svc"
