@@ -1,0 +1,100 @@
+groups:
+
+  # ── Go Runtime — applies to all services ─────────────────────────────────────
+  - name: platform-go-runtime
+    interval: 30s
+    rules:
+
+      # Memory: heap in use approaching GC pressure territory (> 200MB)
+      - alert: GoHighHeapUsage
+        expr: |
+          go_memstats_heap_inuse_bytes{job=~".+-svc"} > 200 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} heap usage above 200MB"
+          description: >
+            {{ $labels.job }} heap in use: {{ $value | humanize1024 }}B.
+            Sustained high heap triggers frequent GC pauses and may indicate
+            a memory leak. Profile with /debug/pprof/heap.
+          runbook: "https://wiki.internal/runbooks/go-memory"
+
+      # Goroutine leak: healthy services have < 500 goroutines at rest
+      - alert: GoGoroutineLeak
+        expr: |
+          go_goroutines{job=~".+-svc"} > 500
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} has >500 goroutines"
+          description: >
+            {{ $labels.job }} is running {{ $value }} goroutines.
+            This may indicate a goroutine leak (unclosed channels, blocked
+            select, or missing context cancellation).
+            Profile with /debug/pprof/goroutine.
+          runbook: "https://wiki.internal/runbooks/go-goroutine-leak"
+
+      # GC pressure: > 10 GC cycles per minute means memory is thrashing
+      - alert: GoHighGCRate
+        expr: |
+          rate(go_gc_duration_seconds_count{job=~".+-svc"}[5m]) * 60 > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.job }} GC running >10x/min"
+          description: >
+            {{ $labels.job }} GC rate: {{ $value | humanize }} cycles/min.
+            High GC pressure causes latency spikes. Consider increasing
+            GOGC or reducing allocation rate.
+          runbook: "https://wiki.internal/runbooks/go-gc-pressure"
+
+  # ── Platform SLO — cross-service availability ─────────────────────────────
+  - name: platform-slo
+    interval: 30s
+    rules:
+
+      # Any service in the platform is down
+      - alert: PlatformServiceDown
+        expr: |
+          count(up{job=~".+-svc"} == 0) > 0
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "One or more platform services are down"
+          description: >
+            {{ $value }} service(s) are currently unreachable by Prometheus.
+            Check individual service alerts for details.
+          runbook: "https://wiki.internal/runbooks/platform-service-down"
+
+      # Platform-wide error rate (all services combined) > 2%
+      - alert: PlatformHighErrorRate
+        expr: |
+          (
+            sum(rate(account_svc_http_requests_total{status=~"5.."}[5m]))
+            +
+            sum(rate(auth_svc_http_requests_total{status=~"5.."}[5m]))
+          )
+          /
+          (
+            sum(rate(account_svc_http_requests_total[5m]))
+            +
+            sum(rate(auth_svc_http_requests_total[5m]))
+          ) > 0.02
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Platform-wide error rate above 2%"
+          description: >
+            Combined 5xx error rate across all services: {{ $value | humanizePercentage }}.
+            This is a platform-level incident. Check individual service dashboards.
+          runbook: "https://wiki.internal/runbooks/platform-error-rate"
