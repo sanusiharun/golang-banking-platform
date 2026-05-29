@@ -17,12 +17,15 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	pkgcrypto "github.com/sanusi/banking/pkg/crypto"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
+	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dao"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/auth-svc/internal/repository"
@@ -48,15 +51,16 @@ type AuthService interface {
 type AuthConfig struct {
 	PrivateKey           *rsa.PrivateKey
 	Issuer               string
-	AccessTokenTTL       time.Duration // default: 15m
-	RefreshTokenTTL      time.Duration // default: 168h (7 days)
-	SubjectEncryptionKey []byte        // AES-256 key for encrypting Subject claim
+	AccessTokenTTL       time.Duration
+	RefreshTokenTTL      time.Duration
+	SubjectEncryptionKey []byte
 	BCryptCost           int
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
 
 type authService struct {
+	tr         *observability.ServiceTracer
 	userRepo   repository.UserRepository
 	tokenStore repository.TokenStore
 	cfg        AuthConfig
@@ -73,6 +77,7 @@ func NewAuthService(userRepo repository.UserRepository, tokenStore repository.To
 		dummy = []byte("$2b$12$invalidhashusedfortimingjustincase000000000000000000000")
 	}
 	return &authService{
+		tr:         observability.NewServiceTracer("AuthService"),
 		userRepo:   userRepo,
 		tokenStore: tokenStore,
 		cfg:        cfg,
@@ -80,28 +85,31 @@ func NewAuthService(userRepo repository.UserRepository, tokenStore repository.To
 	}
 }
 
-// Login authenticates a user and returns an access + refresh token pair.
-func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (*dto.LoginResponse, error) {
-	// ── 1. Fetch user ──────────────────────────────────────────────────────────
+func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (res *dto.LoginResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "Login",
+		attribute.String("auth.username", req.Username),
+	)
+	defer s.tr.Finish(span, &err)
+
 	user, err := s.userRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
 			_ = bcrypt.CompareHashAndPassword([]byte(s.dummyHash), []byte(req.Password))
-			return nil, ErrInvalidCredentials
+			err = ErrInvalidCredentials
+			return nil, err
 		}
 		return nil, fmt.Errorf("auth: lookup user: %w", err)
 	}
 
-	// ── 2. Verify password ────────────────────────────────────────────────────
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		slog.WarnContext(ctx, "auth: invalid password attempt",
 			slog.String("username", req.Username),
 			slog.String("user_id", user.ID),
 		)
-		return nil, ErrInvalidCredentials
+		err = ErrInvalidCredentials
+		return nil, err
 	}
 
-	// ── 3. Issue token pair ───────────────────────────────────────────────────
 	resp, err := s.issueTokenPair(ctx, user)
 	if err != nil {
 		return nil, err
@@ -115,9 +123,10 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (*dto.Lo
 	return resp, nil
 }
 
-// Refresh validates a refresh token and issues a new access + refresh token pair.
-// The old refresh token is revoked (rotation — each token can only be used once).
-func (s *authService) Refresh(ctx context.Context, req *dto.RefreshRequest) (*dto.LoginResponse, error) {
+func (s *authService) Refresh(ctx context.Context, req *dto.RefreshRequest) (res *dto.LoginResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "Refresh")
+	defer s.tr.Finish(span, &err)
+
 	hash := repository.HashToken(req.RefreshToken)
 
 	rt, err := s.tokenStore.FindByHash(ctx, hash)
@@ -125,21 +134,21 @@ func (s *authService) Refresh(ctx context.Context, req *dto.RefreshRequest) (*dt
 		if errors.Is(err, repository.ErrTokenNotFound) ||
 			errors.Is(err, repository.ErrTokenRevoked) ||
 			errors.Is(err, repository.ErrTokenExpired) {
-			return nil, ErrInvalidToken
+			err = ErrInvalidToken
+			return nil, err
 		}
 		return nil, fmt.Errorf("auth: find refresh token: %w", err)
 	}
 
-	// Revoke the used token immediately (rotation).
-	if err := s.tokenStore.Revoke(ctx, hash); err != nil {
+	if err = s.tokenStore.Revoke(ctx, hash); err != nil {
 		return nil, fmt.Errorf("auth: revoke old token: %w", err)
 	}
 
-	// Reload user to get fresh roles and active status.
 	user, err := s.userRepo.FindByID(ctx, rt.UserID)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			return nil, ErrInvalidToken
+			err = ErrInvalidToken
+			return nil, err
 		}
 		return nil, fmt.Errorf("auth: reload user: %w", err)
 	}
@@ -153,11 +162,12 @@ func (s *authService) Refresh(ctx context.Context, req *dto.RefreshRequest) (*dt
 	return resp, nil
 }
 
-// Logout revokes the provided refresh token.
-// The access token will keep working until it expires naturally (short TTL).
-func (s *authService) Logout(ctx context.Context, req *dto.LogoutRequest) error {
+func (s *authService) Logout(ctx context.Context, req *dto.LogoutRequest) (err error) {
+	ctx, span := s.tr.Start(ctx, "Logout")
+	defer s.tr.Finish(span, &err)
+
 	hash := repository.HashToken(req.RefreshToken)
-	if err := s.tokenStore.Revoke(ctx, hash); err != nil {
+	if err = s.tokenStore.Revoke(ctx, hash); err != nil {
 		return fmt.Errorf("auth: logout revoke: %w", err)
 	}
 	slog.InfoContext(ctx, "auth: logout successful")
@@ -166,9 +176,7 @@ func (s *authService) Logout(ctx context.Context, req *dto.LogoutRequest) error 
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-// issueTokenPair mints a new access JWT + refresh token and persists the refresh token.
 func (s *authService) issueTokenPair(ctx context.Context, user *dao.User) (*dto.LoginResponse, error) {
-	// Access token
 	accessTTL := s.cfg.AccessTokenTTL
 	if accessTTL <= 0 {
 		accessTTL = 15 * time.Minute
@@ -188,7 +196,7 @@ func (s *authService) issueTokenPair(ctx context.Context, user *dao.User) (*dto.
 		TenantID: user.TenantID,
 		Roles:    []string(user.Roles),
 		RegisteredClaims: jwt.RegisteredClaims{
-			ID:        uuid.NewString(), // jti — unique per token
+			ID:        uuid.NewString(),
 			Subject:   subject,
 			Issuer:    s.cfg.Issuer,
 			IssuedAt:  jwt.NewNumericDate(time.Now().UTC()),
@@ -202,7 +210,6 @@ func (s *authService) issueTokenPair(ctx context.Context, user *dao.User) (*dto.
 		return nil, fmt.Errorf("auth: sign token: %w", err)
 	}
 
-	// Refresh token
 	refreshTTL := s.cfg.RefreshTokenTTL
 	if refreshTTL <= 0 {
 		refreshTTL = 7 * 24 * time.Hour

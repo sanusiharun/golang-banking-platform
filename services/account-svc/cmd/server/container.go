@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
@@ -41,6 +42,11 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap otel: %w", err)
 	}
+	slog.Info("otel bootstrap complete",
+		slog.Bool("enabled", cfg.OTelEnabled),
+		slog.String("endpoint", cfg.OTelEndpoint),
+		slog.Float64("sampling_rate", cfg.OTelSamplingRate),
+	)
 
 	// ── RSA public key (for JWT verification only) ─────────────────────────────
 	publicKey, err := parsePublicKey(cfg.JWTPublicKeyB64)

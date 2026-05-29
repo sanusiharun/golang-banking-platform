@@ -1,6 +1,4 @@
 // Package repository contains the data access layer for account-svc.
-// Each file defines one repository: interface and GORM implementation together.
-// Uses the global slog logger — no constructor injection required.
 package repository
 
 import (
@@ -10,8 +8,10 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"gorm.io/gorm"
 
+	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dao"
 )
 
@@ -36,27 +36,42 @@ type AccountRepository interface {
 // ── Implementation ────────────────────────────────────────────────────────────
 
 type accountRepository struct {
+	tr *observability.ServiceTracer
 	db *gorm.DB
 }
 
 func NewAccountRepository(db *gorm.DB) AccountRepository {
-	return &accountRepository{db: db}
+	return &accountRepository{
+		tr: observability.NewServiceTracer("AccountRepository"),
+		db: db,
+	}
 }
 
-func (r *accountRepository) Create(ctx context.Context, account *dao.Account) error {
-	if err := r.db.WithContext(ctx).Create(account).Error; err != nil {
+func (r *accountRepository) Create(ctx context.Context, account *dao.Account) (err error) {
+	ctx, span := r.tr.Start(ctx, "Create",
+		attribute.String("account.id", account.ID),
+		attribute.String("account.customer_id", account.CustomerID),
+	)
+	defer r.tr.Finish(span, &err)
+
+	if err = r.db.WithContext(ctx).Create(account).Error; err != nil {
 		slog.ErrorContext(ctx, "repository: create account", slog.String("error", err.Error()))
 		return fmt.Errorf("create account: %w", err)
 	}
 	return nil
 }
 
-func (r *accountRepository) GetByID(ctx context.Context, id string) (*dao.Account, error) {
+func (r *accountRepository) GetByID(ctx context.Context, id string) (res *dao.Account, err error) {
+	ctx, span := r.tr.Start(ctx, "GetByID",
+		attribute.String("account.id", id),
+	)
+	defer r.tr.Finish(span, &err)
+
 	var account dao.Account
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&account).Error
-	if err != nil {
+	if err = r.db.WithContext(ctx).Where("id = ?", id).First(&account).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
+			err = ErrNotFound
+			return nil, err
 		}
 		slog.ErrorContext(ctx, "repository: get account by id",
 			slog.String("account_id", id),
@@ -67,9 +82,15 @@ func (r *accountRepository) GetByID(ctx context.Context, id string) (*dao.Accoun
 	return &account, nil
 }
 
-// Update uses explicit field map + WHERE version = ? for optimistic locking.
-// Never use db.Save() — it would overwrite every column including balance.
-func (r *accountRepository) Update(ctx context.Context, account *dao.Account) error {
+// Update uses optimistic locking via WHERE version = ? to prevent lost updates.
+// Never use db.Save() — it overwrites every column including balance.
+func (r *accountRepository) Update(ctx context.Context, account *dao.Account) (err error) {
+	ctx, span := r.tr.Start(ctx, "Update",
+		attribute.String("account.id", account.ID),
+		attribute.Int64("account.version", int64(account.Version)),
+	)
+	defer r.tr.Finish(span, &err)
+
 	result := r.db.WithContext(ctx).
 		Model(&dao.Account{}).
 		Where("id = ? AND version = ?", account.ID, account.Version).
@@ -85,17 +106,26 @@ func (r *accountRepository) Update(ctx context.Context, account *dao.Account) er
 			slog.String("account_id", account.ID),
 			slog.String("error", result.Error.Error()),
 		)
-		return fmt.Errorf("update account: %w", result.Error)
+		err = fmt.Errorf("update account: %w", result.Error)
+		return err
 	}
 	if result.RowsAffected == 0 {
-		return ErrConflict
+		err = ErrConflict
+		return err
 	}
 
 	account.Version++
 	return nil
 }
 
-func (r *accountRepository) List(ctx context.Context, customerID string, page, pageSize int) ([]*dao.Account, int64, error) {
+func (r *accountRepository) List(ctx context.Context, customerID string, page, pageSize int) (accounts []*dao.Account, total int64, err error) {
+	ctx, span := r.tr.Start(ctx, "List",
+		attribute.String("account.customer_id", customerID),
+		attribute.Int("pagination.page", page),
+		attribute.Int("pagination.page_size", pageSize),
+	)
+	defer r.tr.Finish(span, &err)
+
 	if page < 1 {
 		page = 1
 	}
@@ -103,20 +133,15 @@ func (r *accountRepository) List(ctx context.Context, customerID string, page, p
 		pageSize = 20
 	}
 
-	var (
-		accounts []*dao.Account
-		total    int64
-	)
-
 	q := r.db.WithContext(ctx).Model(&dao.Account{})
 	if customerID != "" {
 		q = q.Where("customer_id = ?", customerID)
 	}
 
-	if err := q.Count(&total).Error; err != nil {
+	if err = q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count accounts: %w", err)
 	}
-	if err := q.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&accounts).Error; err != nil {
+	if err = q.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&accounts).Error; err != nil {
 		return nil, 0, fmt.Errorf("list accounts: %w", err)
 	}
 

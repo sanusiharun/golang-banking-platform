@@ -41,6 +41,11 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap otel: %w", err)
 	}
+	slog.Info("otel bootstrap complete",
+		slog.Bool("enabled", cfg.OTelEnabled),
+		slog.String("endpoint", cfg.OTelEndpoint),
+		slog.Float64("sampling_rate", cfg.OTelSamplingRate),
+	)
 
 	// ── RSA private key ────────────────────────────────────────────────────────
 	privateKey, err := parsePrivateKey(cfg.JWTPrivateKeyB64)

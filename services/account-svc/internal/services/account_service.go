@@ -1,5 +1,4 @@
 // Package services contains the business logic for account-svc.
-// Uses the global slog logger — no *slog.Logger constructor injection.
 package services
 
 import (
@@ -9,8 +8,11 @@ import (
 	"math"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/google/uuid"
 
+	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dao"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/account-svc/internal/repository"
@@ -30,16 +32,24 @@ type AccountService interface {
 // ── Implementation ────────────────────────────────────────────────────────────
 
 type accountService struct {
+	tr   *observability.ServiceTracer
 	repo repository.AccountRepository
 }
 
-// NewAccountService creates a new AccountService.
-// No logger parameter — uses slog global configured in main.go.
 func NewAccountService(repo repository.AccountRepository) AccountService {
-	return &accountService{repo: repo}
+	return &accountService{
+		tr:   observability.NewServiceTracer("AccountService"),
+		repo: repo,
+	}
 }
 
-func (s *accountService) CreateAccount(ctx context.Context, req *dto.CreateAccountRequest) (*dto.AccountResponse, error) {
+func (s *accountService) CreateAccount(ctx context.Context, req *dto.CreateAccountRequest) (res *dto.AccountResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "CreateAccount",
+		attribute.String("account.customer_id", req.CustomerID),
+		attribute.String("account.currency", req.Currency),
+	)
+	defer s.tr.Finish(span, &err)
+
 	account := &dao.Account{
 		ID:         uuid.New().String(),
 		CustomerID: req.CustomerID,
@@ -52,7 +62,7 @@ func (s *accountService) CreateAccount(ctx context.Context, req *dto.CreateAccou
 		UpdatedAt:  time.Now().UTC(),
 	}
 
-	if err := s.repo.Create(ctx, account); err != nil {
+	if err = s.repo.Create(ctx, account); err != nil {
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 
@@ -63,7 +73,12 @@ func (s *accountService) CreateAccount(ctx context.Context, req *dto.CreateAccou
 	return toAccountResponse(account), nil
 }
 
-func (s *accountService) GetAccount(ctx context.Context, id string) (*dto.AccountResponse, error) {
+func (s *accountService) GetAccount(ctx context.Context, id string) (res *dto.AccountResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "GetAccount",
+		attribute.String("account.id", id),
+	)
+	defer s.tr.Finish(span, &err)
+
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -71,7 +86,12 @@ func (s *accountService) GetAccount(ctx context.Context, id string) (*dto.Accoun
 	return toAccountResponse(account), nil
 }
 
-func (s *accountService) GetBalance(ctx context.Context, id string) (*dto.BalanceResponse, error) {
+func (s *accountService) GetBalance(ctx context.Context, id string) (res *dto.BalanceResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "GetBalance",
+		attribute.String("account.id", id),
+	)
+	defer s.tr.Finish(span, &err)
+
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -84,21 +104,29 @@ func (s *accountService) GetBalance(ctx context.Context, id string) (*dto.Balanc
 	}, nil
 }
 
-func (s *accountService) Credit(ctx context.Context, id string, req *dto.CreditRequest) (*dto.AccountResponse, error) {
+func (s *accountService) Credit(ctx context.Context, id string, req *dto.CreditRequest) (res *dto.AccountResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "Credit",
+		attribute.String("account.id", id),
+		attribute.Int64("account.credit_amount", req.Amount),
+	)
+	defer s.tr.Finish(span, &err)
+
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if account.Status != "ACTIVE" {
-		return nil, repository.ErrAccountNotActive
+		err = repository.ErrAccountNotActive
+		return nil, err
 	}
 	if account.Balance > math.MaxInt64-req.Amount {
-		return nil, fmt.Errorf("credit would overflow balance")
+		err = fmt.Errorf("credit would overflow balance")
+		return nil, err
 	}
 
 	account.Balance += req.Amount
 
-	if err := s.repo.Update(ctx, account); err != nil {
+	if err = s.repo.Update(ctx, account); err != nil {
 		return nil, fmt.Errorf("credit update: %w", err)
 	}
 
@@ -110,21 +138,29 @@ func (s *accountService) Credit(ctx context.Context, id string, req *dto.CreditR
 	return toAccountResponse(account), nil
 }
 
-func (s *accountService) Debit(ctx context.Context, id string, req *dto.DebitRequest) (*dto.AccountResponse, error) {
+func (s *accountService) Debit(ctx context.Context, id string, req *dto.DebitRequest) (res *dto.AccountResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "Debit",
+		attribute.String("account.id", id),
+		attribute.Int64("account.debit_amount", req.Amount),
+	)
+	defer s.tr.Finish(span, &err)
+
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	if account.Status != "ACTIVE" {
-		return nil, repository.ErrAccountNotActive
+		err = repository.ErrAccountNotActive
+		return nil, err
 	}
 	if account.Balance < req.Amount {
-		return nil, repository.ErrInsufficientFunds
+		err = repository.ErrInsufficientFunds
+		return nil, err
 	}
 
 	account.Balance -= req.Amount
 
-	if err := s.repo.Update(ctx, account); err != nil {
+	if err = s.repo.Update(ctx, account); err != nil {
 		return nil, fmt.Errorf("debit update: %w", err)
 	}
 
@@ -136,7 +172,14 @@ func (s *accountService) Debit(ctx context.Context, id string, req *dto.DebitReq
 	return toAccountResponse(account), nil
 }
 
-func (s *accountService) ListAccounts(ctx context.Context, customerID string, page, pageSize int) (*dto.PaginatedAccountsResponse, error) {
+func (s *accountService) ListAccounts(ctx context.Context, customerID string, page, pageSize int) (res *dto.PaginatedAccountsResponse, err error) {
+	ctx, span := s.tr.Start(ctx, "ListAccounts",
+		attribute.String("account.customer_id", customerID),
+		attribute.Int("pagination.page", page),
+		attribute.Int("pagination.page_size", pageSize),
+	)
+	defer s.tr.Finish(span, &err)
+
 	accounts, total, err := s.repo.List(ctx, customerID, page, pageSize)
 	if err != nil {
 		return nil, fmt.Errorf("list accounts: %w", err)
@@ -158,8 +201,6 @@ func (s *accountService) ListAccounts(ctx context.Context, customerID string, pa
 	}, nil
 }
 
-// toAccountResponse maps a DAO model to a response DTO.
-// Explicit mapping prevents GORM internals (Version, etc.) leaking into HTTP responses.
 func toAccountResponse(a *dao.Account) *dto.AccountResponse {
 	return &dto.AccountResponse{
 		ID:         a.ID,
