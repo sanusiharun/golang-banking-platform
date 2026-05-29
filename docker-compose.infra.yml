@@ -87,11 +87,14 @@ services:
   # Set DISCORD_WEBHOOK_URL in root .env (copy from Discord channel settings).
   # ──────────────────────────────────────────────────────────────────────────
   alertmanager-discord:
-    image: benjojo/alertmanager-discord:latest
+    build:
+      context: .
+      dockerfile: cmd/discord-relay/Dockerfile
+    image: banking-discord-relay
     container_name: banking-alertmanager-discord
     restart: unless-stopped
     environment:
-      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
     ports:
       - "9094:9094"
     networks:
