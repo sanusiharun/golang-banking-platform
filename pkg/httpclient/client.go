@@ -45,31 +45,58 @@ import (
 )
 
 // Config holds all configuration for the HTTP client.
-// All fields have safe zero values — only BaseURL is required.
+// Only BaseURL is required — all other fields fall back to DefaultConfig() values
+// when zero. Call DefaultConfig() to start from sensible defaults, then override
+// only what you need.
 type Config struct {
 	// BaseURL is prepended to every path in Do(). Required.
 	BaseURL string
 
-	// ConnectTimeout limits the TCP handshake. Default: no limit.
-	// Applied via http.Transport.DialContext — separate from request timeout.
+	// ConnectTimeout limits the TCP handshake.
+	// Default: 5s
 	ConnectTimeout time.Duration
 
 	// RequestTimeout limits the full round-trip (connect + send + read response).
-	// Applied via http.Client.Timeout. Default: no limit.
+	// Applied via http.Client.Timeout.
+	// Default: 30s
 	RequestTimeout time.Duration
 
 	// Retry configuration
-	MaxRetries      int           // max number of retry attempts (0 = no retries)
-	RetryDelay      time.Duration // base delay between retries
-	RetryMultiplier float64       // exponential multiplier (e.g. 2.0 → doubles each attempt)
-	MaxDelay        time.Duration // cap on backoff delay (0 = uncapped)
+	MaxRetries      int           // max retry attempts. Default: 3
+	RetryDelay      time.Duration // base delay between retries. Default: 200ms
+	RetryMultiplier float64       // exponential multiplier. Default: 2.0
+	MaxDelay        time.Duration // cap on backoff delay. Default: 10s
 
-	// Resilience toggles — each caller opts in explicitly
-	RetryEnabled   bool // master switch: turn retry on/off entirely
-	RetryOn5xx     bool // retry HTTP 5xx responses
-	RetryOnTimeout bool // retry network timeouts
-	BackoffEnabled bool // exponential backoff (false = fixed RetryDelay)
-	JitterEnabled  bool // add randomized jitter to backoff delays
+	// Resilience toggles — all enabled by default
+	RetryEnabled   bool // master switch. Default: true
+	RetryOn5xx     bool // retry HTTP 5xx. Default: true
+	RetryOnTimeout bool // retry network timeouts. Default: true
+	BackoffEnabled bool // exponential backoff. Default: true
+	JitterEnabled  bool // add jitter to backoff. Default: true
+}
+
+// DefaultConfig returns a Config with sensible production-ready defaults.
+// Override only the fields you need:
+//
+//	cfg := httpclient.DefaultConfig()
+//	cfg.BaseURL = "https://api.example.com"
+//	cfg.MaxRetries = 5      // more retries for critical path
+//	cfg.RetryOn5xx = false  // no retry for this particular client
+//	client := httpclient.New(cfg)
+func DefaultConfig() Config {
+	return Config{
+		ConnectTimeout:  5 * time.Second,
+		RequestTimeout:  30 * time.Second,
+		MaxRetries:      3,
+		RetryDelay:      200 * time.Millisecond,
+		RetryMultiplier: 2.0,
+		MaxDelay:        10 * time.Second,
+		RetryEnabled:    true,
+		RetryOn5xx:      true,
+		RetryOnTimeout:  true,
+		BackoffEnabled:  true,
+		JitterEnabled:   true,
+	}
 }
 
 // Client is a reusable HTTP client. Safe for concurrent use.
@@ -80,11 +107,32 @@ type Client struct {
 }
 
 // New creates a Client from the given Config.
+// Zero values are replaced with defaults from DefaultConfig().
 // The underlying http.Client and Transport are configured once and reused.
 func New(cfg Config) *Client {
-	dialer := &net.Dialer{}
-	if cfg.ConnectTimeout > 0 {
-		dialer.Timeout = cfg.ConnectTimeout
+	defaults := DefaultConfig()
+
+	if cfg.ConnectTimeout == 0 {
+		cfg.ConnectTimeout = defaults.ConnectTimeout
+	}
+	if cfg.RequestTimeout == 0 {
+		cfg.RequestTimeout = defaults.RequestTimeout
+	}
+	if cfg.MaxRetries == 0 {
+		cfg.MaxRetries = defaults.MaxRetries
+	}
+	if cfg.RetryDelay == 0 {
+		cfg.RetryDelay = defaults.RetryDelay
+	}
+	if cfg.RetryMultiplier == 0 {
+		cfg.RetryMultiplier = defaults.RetryMultiplier
+	}
+	if cfg.MaxDelay == 0 {
+		cfg.MaxDelay = defaults.MaxDelay
+	}
+
+	dialer := &net.Dialer{
+		Timeout: cfg.ConnectTimeout,
 	}
 
 	transport := &http.Transport{
@@ -96,17 +144,7 @@ func New(cfg Config) *Client {
 
 	httpClient := &http.Client{
 		Transport: transport,
-	}
-	if cfg.RequestTimeout > 0 {
-		httpClient.Timeout = cfg.RequestTimeout
-	}
-
-	// Safe defaults
-	if cfg.RetryMultiplier == 0 {
-		cfg.RetryMultiplier = 2.0
-	}
-	if cfg.RetryDelay == 0 {
-		cfg.RetryDelay = 100 * time.Millisecond
+		Timeout:   cfg.RequestTimeout,
 	}
 
 	return &Client{cfg: cfg, http: httpClient}
