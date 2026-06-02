@@ -4,6 +4,7 @@
 // Environment variables:
 //
 //	DISCORD_WEBHOOK_URL  — Discord webhook URL (required)
+//	GRAFANA_URL          — Grafana base URL for dashboard links (default: http://localhost:3000)
 //	PORT                 — HTTP listen port (default: 9094)
 //
 // Alertmanager points its webhook_configs.url here:
@@ -18,6 +19,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -47,6 +49,7 @@ type discordPayload struct {
 
 type embed struct {
 	Title       string  `json:"title"`
+	URL         string  `json:"url,omitempty"` // makes title a clickable link
 	Description string  `json:"description"`
 	Color       int     `json:"color"`
 	Fields      []field `json:"fields,omitempty"`
@@ -71,11 +74,25 @@ const (
 	colorGreen  = 0x57F287 // resolved
 )
 
+// ── Dashboard slugs ───────────────────────────────────────────────────────────
+// These match the dashboard UIDs provisioned in monitoring/grafana/provisioning.
+
+const (
+	dashboardServiceOverview  = "service-overview"
+	dashboardPlatformOverview = "platform-overview"
+)
+
 func main() {
 	webhookURL := os.Getenv("DISCORD_WEBHOOK_URL")
 	if webhookURL == "" {
 		log.Fatal("DISCORD_WEBHOOK_URL is not set")
 	}
+
+	grafanaURL := os.Getenv("GRAFANA_URL")
+	if grafanaURL == "" {
+		grafanaURL = "http://localhost:3000"
+	}
+	grafanaURL = strings.TrimRight(grafanaURL, "/")
 
 	port := os.Getenv("PORT")
 	if port == "" {
@@ -101,7 +118,7 @@ func main() {
 			return
 		}
 
-		dp := buildDiscordPayload(payload)
+		dp := buildDiscordPayload(payload, grafanaURL)
 		if err := sendToDiscord(webhookURL, dp); err != nil {
 			log.Printf("failed to send to Discord: %v", err)
 			http.Error(w, "discord error", http.StatusInternalServerError)
@@ -115,13 +132,13 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	log.Printf("discord-relay listening on :%s", port)
+	log.Printf("discord-relay listening on :%s (grafana: %s)", port, grafanaURL)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func buildDiscordPayload(payload amPayload) discordPayload {
+func buildDiscordPayload(payload amPayload, grafanaURL string) discordPayload {
 	var embeds []embed
 
 	for _, a := range payload.Alerts {
@@ -154,6 +171,9 @@ func buildDiscordPayload(payload amPayload) discordPayload {
 			desc = alertName
 		}
 
+		// Build Grafana dashboard link
+		dashURL := buildDashboardURL(grafanaURL, service, alertName)
+
 		fields := []field{}
 		if service != "" {
 			fields = append(fields, field{Name: "Service", Value: service, Inline: true})
@@ -166,9 +186,15 @@ func buildDiscordPayload(payload amPayload) discordPayload {
 			Value:  a.StartsAt.Format("2006-01-02 15:04:05 UTC"),
 			Inline: false,
 		})
+		fields = append(fields, field{
+			Name:   "🔗 Dashboard",
+			Value:  fmt.Sprintf("[View in Grafana](%s)", dashURL),
+			Inline: false,
+		})
 
 		embeds = append(embeds, embed{
 			Title:       title,
+			URL:         dashURL, // makes the title itself a clickable link
 			Description: desc,
 			Color:       color,
 			Fields:      fields,
@@ -189,6 +215,21 @@ func buildDiscordPayload(payload amPayload) discordPayload {
 	}
 
 	return discordPayload{Content: content, Embeds: embeds}
+}
+
+// buildDashboardURL returns a Grafana dashboard link.
+// - Service-specific alerts → Service Overview filtered by service name
+// - Platform/generic alerts → Platform Overview
+func buildDashboardURL(grafanaURL, service, alertName string) string {
+	// Platform-level alerts (no specific service)
+	if service == "" {
+		return fmt.Sprintf("%s/d/%s/platform-overview", grafanaURL, dashboardPlatformOverview)
+	}
+
+	// Service-specific: link to service overview with service variable pre-set
+	params := url.Values{}
+	params.Set("var-service", service)
+	return fmt.Sprintf("%s/d/%s/service-overview?%s", grafanaURL, dashboardServiceOverview, params.Encode())
 }
 
 func sendToDiscord(webhookURL string, payload discordPayload) error {

@@ -93,6 +93,7 @@ services:
     restart: unless-stopped
     environment:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      GRAFANA_URL: ${GRAFANA_URL:-http://localhost:3000}
     ports:
       - "9094:9094"
     networks:
