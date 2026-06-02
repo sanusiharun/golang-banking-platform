@@ -5,6 +5,7 @@ package validator
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -22,9 +23,9 @@ type Validator struct {
 func New() *Validator {
 	vld := &Validator{}
 	vld.once.Do(func() {
-		vld.v = validator.New(validator.WithRequiredStructFields())
+		vld.v = validator.New()
 		// Register custom tag name function to use JSON field names in errors.
-		vld.v.RegisterTagNameFunc(func(fld validator.StructField) string {
+		vld.v.RegisterTagNameFunc(func(fld reflect.StructField) string {
 			name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
 			if name == "-" {
 				return ""

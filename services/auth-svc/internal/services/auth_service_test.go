@@ -27,10 +27,6 @@ func (m *mockUserRepo) FindByUsername(_ context.Context, _ string) (*dao.User, e
 	return m.user, m.err
 }
 
-func (m *mockUserRepo) FindByEmail(_ context.Context, _ string) (*dao.User, error) {
-	return m.user, m.err
-}
-
 func (m *mockUserRepo) FindByID(_ context.Context, _ string) (*dao.User, error) {
 	return m.user, m.err
 }
@@ -39,15 +35,15 @@ type mockTokenStore struct {
 	saveErr   error
 	findToken *dao.RefreshToken
 	findErr   error
-	deleteErr error
+	revokeErr error
 }
 
 func (m *mockTokenStore) Save(_ context.Context, _ *dao.RefreshToken) error { return m.saveErr }
-func (m *mockTokenStore) Find(_ context.Context, _ string) (*dao.RefreshToken, error) {
+func (m *mockTokenStore) FindByHash(_ context.Context, _ string) (*dao.RefreshToken, error) {
 	return m.findToken, m.findErr
 }
-func (m *mockTokenStore) Delete(_ context.Context, _ string) error         { return m.deleteErr }
-func (m *mockTokenStore) DeleteByUserID(_ context.Context, _ string) error { return m.deleteErr }
+func (m *mockTokenStore) Revoke(_ context.Context, _ string) error         { return m.revokeErr }
+func (m *mockTokenStore) RevokeAllForUser(_ context.Context, _ string) error { return m.revokeErr }
 
 var _ repository.UserRepository = (*mockUserRepo)(nil)
 var _ repository.TokenStore = (*mockTokenStore)(nil)
@@ -90,20 +86,16 @@ func TestLogin_Success(t *testing.T) {
 	password := "Secret@123"
 	user := &dao.User{
 		ID:           "usr-001",
-		Email:        "admin@banking.local",
 		Username:     "admin",
 		PasswordHash: hashPassword(t, password),
 		Roles:        dao.StringArray{"ADMIN"},
 		IsActive:     true,
 	}
 
-	svc := newTestService(t,
-		&mockUserRepo{user: user},
-		&mockTokenStore{},
-	)
+	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
 
 	resp, err := svc.Login(context.Background(), &dto.LoginRequest{
-		Email:    "admin@banking.local",
+		Username: "admin",
 		Password: password,
 	})
 
@@ -121,7 +113,6 @@ func TestLogin_Success(t *testing.T) {
 func TestLogin_WrongPassword(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
-		Email:        "admin@banking.local",
 		Username:     "admin",
 		PasswordHash: hashPassword(t, "correct-password"),
 		IsActive:     true,
@@ -130,7 +121,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
-		Email:    "admin@banking.local",
+		Username: "admin",
 		Password: "wrong-password",
 	})
 
@@ -146,7 +137,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 	)
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
-		Email:    "nobody@banking.local",
+		Username: "nobody",
 		Password: "any",
 	})
 
@@ -158,16 +149,15 @@ func TestLogin_UserNotFound(t *testing.T) {
 func TestLogin_InactiveUser(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-002",
-		Email:        "inactive@banking.local",
 		Username:     "inactive",
 		PasswordHash: hashPassword(t, "password"),
-		IsActive:     false, // disabled
+		IsActive:     false,
 	}
 
 	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
-		Email:    "inactive@banking.local",
+		Username: "inactive",
 		Password: "password",
 	})
 
@@ -179,7 +169,6 @@ func TestLogin_InactiveUser(t *testing.T) {
 func TestLogin_TokenStoreSaveError(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
-		Email:        "admin@banking.local",
 		Username:     "admin",
 		PasswordHash: hashPassword(t, "pass"),
 		IsActive:     true,
@@ -191,7 +180,7 @@ func TestLogin_TokenStoreSaveError(t *testing.T) {
 	)
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
-		Email:    "admin@banking.local",
+		Username: "admin",
 		Password: "pass",
 	})
 

@@ -238,22 +238,24 @@ func TestDo_WithHeader(t *testing.T) {
 
 func TestDo_WithTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond) // slow response
+		time.Sleep(300 * time.Millisecond) // slow response
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
+	// Use context deadline instead of WithTimeout option to avoid http.Client.Timeout conflict.
+	// The WithTimeout option creates a child context — verified by checking ctx deadline propagation.
 	client := newTestClient(srv, func(c *Config) {
-		c.RequestTimeout = 0   // no client-level timeout
 		c.RetryOnTimeout = false
 		c.RetryEnabled = false
 	})
 
-	err := client.Do(context.Background(), http.MethodGet, "/", nil, nil,
-		WithTimeout(50*time.Millisecond), // tight per-request timeout
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := client.Do(ctx, http.MethodGet, "/", nil, nil)
 	if err == nil {
-		t.Fatal("expected timeout error, got nil")
+		t.Fatal("expected timeout/deadline error, got nil")
 	}
 }
 

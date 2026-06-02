@@ -224,11 +224,15 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any,
 		// HTTP 5xx — retry if configured
 		if resp.StatusCode >= 500 {
 			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, summarize(respBody))
-			if c.shouldRetryStatus(&c.cfg, resp.StatusCode) && attempt < maxAttempts-1 {
-				if sleepErr := sleep(ctx, backoff(&c.cfg, attempt)); sleepErr != nil {
-					return sleepErr
+			if c.shouldRetryStatus(&c.cfg, resp.StatusCode) {
+				if attempt < maxAttempts-1 {
+					if sleepErr := sleep(ctx, backoff(&c.cfg, attempt)); sleepErr != nil {
+						return sleepErr
+					}
+					continue
 				}
-				continue
+				// Retries enabled but budget exhausted
+				return fmt.Errorf("%w: %w", ErrRetriesExhausted, lastErr)
 			}
 			return lastErr
 		}
@@ -256,14 +260,13 @@ func (c *Client) buildRequest(
 	headers map[string]string,
 	timeout time.Duration,
 ) (*http.Request, error) {
-	// Apply per-request timeout via a child context
+	// Apply per-request timeout via a child context.
+	// This overrides the client-level http.Client.Timeout for this specific call.
 	reqCtx := ctx
-	if timeout > 0 && c.http.Timeout == 0 {
-		// Only use context-based timeout when http.Client.Timeout is not already set
-		// to avoid double-counting.
+	if timeout > 0 {
 		var cancel context.CancelFunc
 		reqCtx, cancel = context.WithTimeout(ctx, timeout)
-		_ = cancel // caller's Do loop controls lifecycle via the parent ctx
+		defer cancel()
 	}
 
 	var bodyReader io.Reader
