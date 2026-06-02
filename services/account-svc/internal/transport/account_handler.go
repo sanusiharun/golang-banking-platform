@@ -3,6 +3,10 @@
 package transport
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"net/http"
 	"strconv"
 
@@ -106,9 +110,16 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 // Credit handles POST /v1/accounts/{id}/credit
+//
+// Controlled by Flipt flag: "banking_operation_hours" (string variant, e.g. "07:00-15:00")
+// Requests outside the configured window are rejected with 403.
 func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Credit")
 	defer span.End()
+
+	if err := h.checkOperationHours(ctx, w); err != nil {
+		return
+	}
 
 	var req dto.CreditRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -131,9 +142,16 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 }
 
 // Debit handles POST /v1/accounts/{id}/debit
+//
+// Controlled by Flipt flag: "banking_operation_hours" (string variant, e.g. "07:00-15:00")
+// Requests outside the configured window are rejected with 403.
 func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Debit")
 	defer span.End()
+
+	if err := h.checkOperationHours(ctx, w); err != nil {
+		return
+	}
 
 	var req dto.DebitRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -176,4 +194,22 @@ func (h *AccountHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// checkOperationHours reads the banking_operation_hours flag from Flipt and
+// rejects the request with 403 if the current time is outside the window.
+// Returns nil if the operation is allowed, non-nil if the response was already written.
+func (h *AccountHandler) checkOperationHours(ctx context.Context, w http.ResponseWriter) error {
+	window := h.flags.GetString(ctx, "banking_operation_hours", "")
+	ok, err := featureflag.IsWithinOperationHours(window, time.UTC)
+	if err != nil {
+		// Bad config — log and allow through (don't block on misconfiguration)
+		return nil
+	}
+	if !ok {
+		writeError(w, http.StatusForbidden, "OUTSIDE_OPERATION_HOURS",
+			"debit/credit operations are only allowed during banking hours: "+window)
+		return fmt.Errorf("outside operation hours")
+	}
+	return nil
 }
