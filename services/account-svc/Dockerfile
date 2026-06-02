@@ -12,12 +12,13 @@ WORKDIR /app
 # Copy workspace descriptor first so Docker cache is invalidated only when
 # module requirements change.
 COPY go.work go.work.sum* ./
-
-# Copy module files for both workspace members.
 COPY pkg/go.mod pkg/go.sum* ./pkg/
-COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account-svc/
 
-# Download dependencies (cached layer).
+COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account-svc/
+COPY services/auth-svc/go.mod services/auth-svc/go.sum* ./services/auth-svc/
+
+RUN go work sync
+
 RUN cd services/account-svc && go mod download
 
 # Copy full source.

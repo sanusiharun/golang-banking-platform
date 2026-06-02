@@ -1,6 +1,6 @@
 module github.com/sanusi/banking/pkg
 
-go 1.25.0
+go 1.26.3
 
 require (
 	github.com/go-playground/validator/v10 v10.22.0

@@ -6,7 +6,11 @@ WORKDIR /app
 
 COPY go.work go.work.sum* ./
 COPY pkg/go.mod pkg/go.sum* ./pkg/
+
+COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account-svc/
 COPY services/auth-svc/go.mod services/auth-svc/go.sum* ./services/auth-svc/
+
+RUN go work sync
 
 RUN cd services/auth-svc && go mod download
 
