@@ -86,12 +86,13 @@ services:
   # Set DISCORD_WEBHOOK_URL in monitoring/.env
   # ──────────────────────────────────────────────────────────────────────────
   alertmanager-discord:
-    image: rogerrum/alertmanager-discord:latest
+    build:
+      context: ./discord-relay   # pure Go — builds natively on arm64, amd64, Windows
+    image: banking-discord-relay
     container_name: banking-alertmanager-discord
     restart: unless-stopped
     environment:
-      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
-      DISCORD_USERNAME: "Alertmanager"
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
     ports:
       - "9094:9094"
     networks:
