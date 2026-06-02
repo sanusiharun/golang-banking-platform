@@ -53,3 +53,4 @@ prometheus-data/
 # Stack-specific credentials (each folder owns its secrets)
 datasource/.env
 monitoring/.env
+platform/.env

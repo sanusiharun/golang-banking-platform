@@ -1,0 +1,106 @@
+# platform/docker-compose.yml — shared platform services
+#
+# Contains: Redis (tokens, sessions, cache, rate limiting)
+#           Flipt  (feature flags — optional, services gracefully skip if unreachable)
+#           NATS   (async messaging — optional, wire in when adding notification-svc etc.)
+#
+# Start:    make platform-up
+# Stop:     make platform-down
+# Logs:     docker compose -f platform/docker-compose.yml logs -f
+#
+# .env is auto-loaded from platform/.env
+
+networks:
+  banking-net:
+    name: banking-net
+    driver: bridge
+
+volumes:
+  redis-data:
+  flipt-data:
+  nats-data:
+
+services:
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Redis 7 — token store, session cache, rate limiting
+  # Used by: auth-svc (refresh tokens), all services (rate limit counters)
+  # CLI:  redis-cli -a <password> -p 6379
+  # ──────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: platform-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks:
+      - banking-net
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Flipt — feature flags (optional per-service)
+  # UI:   http://localhost:8082
+  # gRPC: localhost:9000
+  # REST: localhost:8082/api/v1
+  #
+  # Services opt-in by setting FLIPT_URL in their .env.
+  # If FLIPT_URL is empty or Flipt is unreachable, pkg/featureflag returns defaults.
+  # ──────────────────────────────────────────────────────────────────────────
+  flipt:
+    image: flipt/flipt:latest
+    container_name: platform-flipt
+    restart: unless-stopped
+    ports:
+      - "8082:8080"   # UI + REST API
+      - "9000:9000"   # gRPC
+    environment:
+      FLIPT_DB_URL: "file:/var/opt/flipt/flipt.db"
+      FLIPT_LOG_LEVEL: warn
+    volumes:
+      - flipt-data:/var/opt/flipt
+    networks:
+      - banking-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # NATS — async messaging between services
+  # Port:      4222 (client connections)
+  # Dashboard: http://localhost:8222
+  #
+  # Use when: account-svc publishes events → notification-svc consumes them
+  # Wire in pkg/messaging when you add your first async consumer.
+  # ──────────────────────────────────────────────────────────────────────────
+  nats:
+    image: nats:2-alpine
+    container_name: platform-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # HTTP dashboard
+    command: ["-js", "-m", "8222"]   # -js enables JetStream (persistent messaging)
+    volumes:
+      - nats-data:/data
+    networks:
+      - banking-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

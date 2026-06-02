@@ -6,7 +6,6 @@ volumes:
   mysql_data:
   postgres_data:
   mongo_data:
-  redis_data:
 
 services:
 
@@ -106,25 +105,3 @@ services:
       - --quiet
       - --eval
       - "try { rs.status() } catch(e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'ds_mongodb:27017'}]}) }"
-
-  # ── Redis 7 ───────────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    container_name: ds_redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    command: >
-      redis-server
-      --appendonly yes
-      --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redis_data:/data
-    networks:
-      - datasource_net
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 10s

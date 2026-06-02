@@ -65,7 +65,15 @@ Open `services/account-svc/.env` and fill in:
 
 > account-svc holds the **public key only**. It verifies tokens but cannot issue them.
 
-### 2d. Monitoring
+### 2d. Platform (Redis, Flipt, NATS)
+
+```bash
+cp platform/.env.example platform/.env
+```
+
+Fill in Redis password — or use the default from `CREDENTIALS.txt`.
+
+### 2e. Monitoring
 
 ```bash
 cp monitoring/.env.example monitoring/.env
@@ -93,8 +101,11 @@ This outputs `JWT_PRIVATE_KEY_B64` and `JWT_PUBLIC_KEY_B64`. Copy both into `ser
 ## Step 4 — Start infrastructure
 
 ```bash
-# Start databases (Postgres, MySQL, MongoDB, Redis)
+# Start databases (Postgres, MySQL, MongoDB)
 make datasource-up
+
+# Start platform services (Redis, Flipt, NATS)
+make platform-up
 
 # Start observability stack (Prometheus, Grafana, Jaeger, Loki, Alertmanager)
 make monitoring-up
@@ -176,7 +187,7 @@ curl -s http://localhost:8081/accounts \
 ## Full stack in one command
 
 ```bash
-make stack-up    # datasource + monitoring + services (Docker)
+make stack-up    # datasource + platform + monitoring + services (Docker)
 make stack-down  # stop everything
 ```
 
@@ -206,6 +217,9 @@ docker logs banking-alertmanager-discord
 ```
 golang-banking-platform/
 ├── datasource/
+│   ├── .env.example      ← committed, safe to read
+│   └── .env              ← gitignored, your local secrets
+├── platform/
 │   ├── .env.example      ← committed, safe to read
 │   └── .env              ← gitignored, your local secrets
 ├── monitoring/

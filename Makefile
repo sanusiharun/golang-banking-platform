@@ -1,4 +1,4 @@
-.PHONY: build test lint generate datasource-up datasource-down datasource-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
+.PHONY: build test lint generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -63,7 +63,7 @@ proto: ## Generate Go code from .proto files (requires protoc + protoc-gen-go)
 			--go-grpc_opt=paths=source_relative \
 			{} \;
 
-# ─── Datasource — shared databases (MySQL, PostgreSQL, MongoDB, Redis) ────────
+# ─── Datasource — persistent databases (MySQL, PostgreSQL, MongoDB) ───────────
 datasource-up: ## Start shared database stack
 	docker compose -f datasource/docker-compose.yml up -d
 
@@ -72,6 +72,16 @@ datasource-down: ## Stop shared database stack
 
 datasource-logs: ## Tail datasource logs
 	docker compose -f datasource/docker-compose.yml logs -f
+
+# ─── Platform — shared runtime services (Redis, Flipt, NATS) ─────────────────
+platform-up: ## Start platform services (Redis, Flipt feature flags, NATS messaging)
+	docker compose -f platform/docker-compose.yml up -d
+
+platform-down: ## Stop platform services
+	docker compose -f platform/docker-compose.yml down
+
+platform-logs: ## Tail platform logs
+	docker compose -f platform/docker-compose.yml logs -f
 
 # ─── Monitoring — observability infrastructure (Jaeger, Prometheus, Alertmanager, Grafana) ──────
 monitoring-up: ## Start observability infrastructure
@@ -94,11 +104,12 @@ services-logs: ## Tail microservice logs
 	docker compose logs -f
 
 # ─── Full stack ───────────────────────────────────────────────────────────────
-stack-up: datasource-up monitoring-up services-up ## Start everything (datasource + monitoring + microservices)
+stack-up: datasource-up platform-up monitoring-up services-up ## Start everything (datasource + platform + monitoring + microservices)
 
 stack-down: ## Stop everything
 	docker compose down
 	docker compose -f monitoring/docker-compose.infra.yml down
+	docker compose -f platform/docker-compose.yml down
 	docker compose -f datasource/docker-compose.yml down
 
 # ─── Database migrations ──────────────────────────────────────────────────────
