@@ -101,6 +101,13 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (res *dt
 		return nil, fmt.Errorf("auth: lookup user: %w", err)
 	}
 
+	// Reject inactive accounts before checking password (timing-safe: always run bcrypt)
+	if !user.IsActive {
+		_ = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
+		err = ErrInvalidCredentials
+		return nil, err
+	}
+
 	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		slog.WarnContext(ctx, "auth: invalid password attempt",
 			slog.String("username", req.Username),

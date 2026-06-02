@@ -190,13 +190,14 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any,
 		}
 
 		// Build a fresh request each attempt (body reader is consumed)
-		req, err := c.buildRequest(ctx, method, url, body, ro.headers, timeout)
+		req, cancel, err := c.buildRequest(ctx, method, url, body, ro.headers, timeout)
 		if err != nil {
 			// Request construction failure is always non-transient
 			return fmt.Errorf("%w: build request: %w", ErrNonTransient, err)
 		}
 
 		resp, err := c.http.Do(req)
+		cancel() // release per-request context resources
 		if err != nil {
 			// Network-level error
 			if isNonTransientNetworkError(err) {
@@ -253,34 +254,36 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any,
 }
 
 // buildRequest constructs an *http.Request with optional body, headers, and per-request timeout.
+// The cancel function (if non-nil) must be called by the caller after the request completes.
 func (c *Client) buildRequest(
 	ctx context.Context,
 	method, url string,
 	body any,
 	headers map[string]string,
 	timeout time.Duration,
-) (*http.Request, error) {
+) (*http.Request, context.CancelFunc, error) {
 	// Apply per-request timeout via a child context.
-	// This overrides the client-level http.Client.Timeout for this specific call.
+	// Cancel is returned to the caller — must be called after http.Client.Do returns.
 	reqCtx := ctx
+	var cancel context.CancelFunc = func() {} // no-op default
 	if timeout > 0 {
-		var cancel context.CancelFunc
 		reqCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
 	}
 
 	var bodyReader io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
 		if err != nil {
-			return nil, fmt.Errorf("marshal body: %w", err)
+			cancel()
+		return nil, nil, fmt.Errorf("marshal body: %w", err)
 		}
 		bodyReader = bytes.NewReader(b)
 	}
 
 	req, err := http.NewRequestWithContext(reqCtx, method, url, bodyReader)
 	if err != nil {
-		return nil, err
+		cancel()
+		return nil, nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -290,7 +293,7 @@ func (c *Client) buildRequest(
 		req.Header.Set(k, v)
 	}
 
-	return req, nil
+	return req, cancel, nil
 }
 
 // summarize returns the first 200 bytes of a response body for error messages.
