@@ -83,13 +83,13 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
-	ffClient := featureflag.New(cfg.FliptURL, "default")
+	featureflag.Init(cfg.FliptURL, "default")
 
 	// ── Repositories & services ───────────────────────────────────────────────
 	accountRepo := repository.NewAccountRepository(db)
 	validate := validator.New()
 	accountSvc := services.NewAccountService(accountRepo)
-	accountHandler := transport.NewAccountHandler(accountSvc, validate, ffClient)
+	accountHandler := transport.NewAccountHandler(accountSvc, validate)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()

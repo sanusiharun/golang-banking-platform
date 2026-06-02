@@ -21,18 +21,17 @@ import (
 
 // AccountHandler holds dependencies for account HTTP handlers.
 type AccountHandler struct {
-	flags    *featureflag.Client
+
 	tr       *observability.ServiceTracer
 	svc      services.AccountService
 	validate *validator.Validate
 }
 
-func NewAccountHandler(svc services.AccountService, validate *validator.Validate, flags *featureflag.Client) *AccountHandler {
+func NewAccountHandler(svc services.AccountService, validate *validator.Validate) *AccountHandler {
 	return &AccountHandler{
 		tr:       observability.NewServiceTracer("AccountHandler"),
 		svc:      svc,
 		validate: validate,
-		flags:    flags,
 	}
 }
 
@@ -79,7 +78,7 @@ func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 
 	// Feature flag: enrich response with metadata when flag is enabled.
 	// Toggle in Flipt UI → http://localhost:8082 → flag key: show_account_metadata
-	if h.flags.IsEnabled(ctx, "show_account_metadata", false) {
+	if featureflag.IsEnabled(ctx, "show_account_metadata", false) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"data": resp,
 			"metadata": map[string]any{
@@ -200,7 +199,7 @@ func (h *AccountHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 // rejects the request with 403 if the current time is outside the window.
 // Returns nil if the operation is allowed, non-nil if the response was already written.
 func (h *AccountHandler) checkOperationHours(ctx context.Context, w http.ResponseWriter) error {
-	window := h.flags.GetString(ctx, "banking_operation_hours", "")
+	window := featureflag.GetString(ctx, "banking_operation_hours", "")
 	ok, err := featureflag.IsWithinOperationHours(window, time.UTC)
 	if err != nil {
 		// Bad config — log and allow through (don't block on misconfiguration)

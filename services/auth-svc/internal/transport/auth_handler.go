@@ -15,18 +15,17 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	flags    *featureflag.Client
+
 	tr       *observability.ServiceTracer
 	svc      services.AuthService
 	validate *validator.Validate
 }
 
-func NewAuthHandler(svc services.AuthService, validate *validator.Validate, flags *featureflag.Client) *AuthHandler {
+func NewAuthHandler(svc services.AuthService, validate *validator.Validate) *AuthHandler {
 	return &AuthHandler{
 		tr:       observability.NewServiceTracer("AuthHandler"),
 		svc:      svc,
 		validate: validate,
-		flags:    flags,
 	}
 }
 
@@ -41,7 +40,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	// Feature flag: block all logins during maintenance window.
 	// Toggle in Flipt UI → http://localhost:8082 → flag key: maintenance_mode
-	if h.flags.IsEnabled(ctx, "maintenance_mode", false) {
+	if featureflag.IsEnabled(ctx, "maintenance_mode", false) {
 		writeError(w, http.StatusServiceUnavailable, "MAINTENANCE_MODE", "service is temporarily unavailable for maintenance")
 		return
 	}

@@ -97,8 +97,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		BCryptCost:           cfg.BCryptCost,
 	})
 
-	ffClient := featureflag.New(cfg.FliptURL, "default")
-	authHandler := transport.NewAuthHandler(authSvc, validate, ffClient)
+	featureflag.Init(cfg.FliptURL, "default")
+	authHandler := transport.NewAuthHandler(authSvc, validate)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()
