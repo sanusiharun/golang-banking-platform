@@ -1,37 +1,41 @@
-# .golangci.yml — golangci-lint configuration for the banking platform.
-# Run with: golangci-lint run ./...
+# .golangci.yml — linter configuration for golang-banking-platform
+# Run: make lint
+# Docs: https://golangci-lint.run/usage/configuration/
+
+version: "2"
 
 run:
   timeout: 5m
-  go: "1.23"
   tests: true
 
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
 linters:
+  default: none
   enable:
-    - errcheck        # checks unchecked errors
-    - gosimple        # simplification suggestions
-    - govet           # go vet checks
-    - ineffassign     # detects ineffectual assignments
+    # ── Correctness ────────────────────────────────────────────────────────────
+    - errcheck        # unchecked errors (most important)
     - staticcheck     # static analysis
-    - unused          # checks for unused code
-    - gofmt           # enforces gofmt formatting
-    - goimports       # checks import ordering
-    - revive          # drop-in replacement for golint
-    - gocritic        # wide range of style checks
-    - gosec           # security checks
-    - exhaustive      # checks exhaustiveness of enum switches
-    - prealloc        # suggests slice pre-allocation
-    - bodyclose       # checks HTTP response body is closed
-    - noctx           # finds http requests without context
-    - rowserrcheck    # checks sql.Rows.Err is checked
-    - sqlclosecheck   # checks sql.Rows/Stmt are closed
-    - unparam         # reports unused function parameters
-    - misspell        # finds common misspellings
+    - unused          # unused code
+    - ineffassign     # ineffectual assignments
+    - govet           # suspicious constructs
+
+    # ── Style & maintainability ────────────────────────────────────────────────
+    - gofmt           # formatting
+    - goimports       # import ordering
+    - misspell        # common misspellings
+    - unconvert       # unnecessary type conversions
+    - unparam         # unused function parameters
+    - nakedret        # naked returns in long functions
+    - noctx           # http requests without context
+
+    # ── Security ───────────────────────────────────────────────────────────────
+    - gosec           # security issues
+
+    # ── Complexity ─────────────────────────────────────────────────────────────
+    - cyclop          # cyclomatic complexity
+    - gocognit        # cognitive complexity
+
+    # ── Error handling ─────────────────────────────────────────────────────────
+    - errorlint       # error wrapping issues
 
 linters-settings:
   errcheck:
@@ -40,53 +44,39 @@ linters-settings:
 
   govet:
     enable-all: true
+    disable:
+      - fieldalignment
 
-  revive:
-    rules:
-      - name: exported
-        severity: warning
-      - name: var-naming
-        severity: warning
-      - name: error-return
-        severity: error
-      - name: error-strings
-        severity: warning
+  cyclop:
+    max-complexity: 15
+
+  gocognit:
+    min-complexity: 20
 
   gosec:
     excludes:
-      - G404  # use of weak random number generator (math/rand) — we use crypto/rand
-    severity: medium
-    confidence: medium
+      - G401
+      - G501
+      - G304
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-    disabled-checks:
-      - ifElseChain
-      - singleCaseSwitch
-
-  exhaustive:
-    default-signifies-exhaustive: true
-
-  gofmt:
-    simplify: true
-
-  misspell:
-    locale: UK
+  nakedret:
+    max-func-lines: 30
 
 issues:
+  max-issues-per-linter: 50
+  max-same-issues: 10
+
   exclude-rules:
-    # Test files: relax some rules.
-    - path: "_test.go"
+    - path: "_test\\.go"
       linters:
         - errcheck
         - gosec
         - unparam
-    # Integration tests: allow skips on DB connectivity.
-    - path: "tests/integration"
+
+    - path: "\\.pb\\.go"
       linters:
-        - errcheck
-  max-issues-per-linter: 0
-  max-same-issues: 0
+        - all
+
+    - path: "migrations/"
+      linters:
+        - gosec

@@ -1,4 +1,4 @@
-.PHONY: build test lint generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
+.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -9,6 +9,19 @@ PROTO_DIR   := proto
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+# ─── Key generation ───────────────────────────────────────────────────────────
+gen-keys: ## Generate RS256 keypair for JWT signing (copy output into services/.env)
+	@echo "Generating RS256 keypair..."
+	@PRIVATE=$$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 2>/dev/null) && \
+	 PUBLIC=$$(echo "$$PRIVATE" | openssl pkey -pubout 2>/dev/null) && \
+	 echo "" && \
+	 echo "Add these to services/auth-svc/.env:" && \
+	 echo "JWT_PRIVATE_KEY_B64=$$(echo "$$PRIVATE" | base64 | tr -d '\n')" && \
+	 echo "JWT_PUBLIC_KEY_B64=$$(echo "$$PUBLIC"  | base64 | tr -d '\n')" && \
+	 echo "" && \
+	 echo "Add only the public key to services/account-svc/.env:" && \
+	 echo "JWT_PUBLIC_KEY_B64=$$(echo "$$PUBLIC"  | base64 | tr -d '\n')"
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 build: ## Build all service binaries
