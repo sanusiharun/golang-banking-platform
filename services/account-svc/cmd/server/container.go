@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/database"
+	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/pkg/featureflag"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
@@ -82,6 +83,9 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
+	// ── Auth service client (for inter-service calls) ────────────────────────
+	authClient := authclient.New(cfg.AuthSvcURL)
+
 	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
 	featureflag.Init(cfg.FliptURL, "default")
 
@@ -89,7 +93,7 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	accountRepo := repository.NewAccountRepository(db)
 	validate := validator.New()
 	accountSvc := services.NewAccountService(accountRepo)
-	accountHandler := transport.NewAccountHandler(accountSvc, validate)
+	accountHandler := transport.NewAccountHandler(accountSvc, validate, authClient)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()

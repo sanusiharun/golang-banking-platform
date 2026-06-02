@@ -52,7 +52,10 @@ type Config struct {
 	RateLimitRPS   int
 
 	// Feature flags — optional, returns defaults if empty or unreachable
-	FliptURL string
+	FliptURL   string
+
+	// Downstream service URLs
+	AuthSvcURL string // e.g. http://localhost:8080
 	RateLimitBurst int
 
 	// Observability
@@ -105,6 +108,7 @@ func Load() (*Config, error) {
 		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
 		RateLimitRPS:     getEnvInt("RATE_LIMIT_RPS", 1000),
 		FliptURL:         getEnv("FLIPT_URL", ""),
+		AuthSvcURL:       getEnv("AUTH_SVC_URL", "http://localhost:8080"),
 		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
 		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),

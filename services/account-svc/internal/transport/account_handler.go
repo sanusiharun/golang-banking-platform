@@ -14,6 +14,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/featureflag"
+	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/account-svc/internal/services"
@@ -21,13 +22,14 @@ import (
 
 // AccountHandler holds dependencies for account HTTP handlers.
 type AccountHandler struct {
+	authClient *authclient.Client
 
 	tr       *observability.ServiceTracer
 	svc      services.AccountService
 	validate *validator.Validate
 }
 
-func NewAccountHandler(svc services.AccountService, validate *validator.Validate) *AccountHandler {
+func NewAccountHandler(svc services.AccountService, validate *validator.Validate, authClient *authclient.Client) *AccountHandler {
 	return &AccountHandler{
 		tr:       observability.NewServiceTracer("AccountHandler"),
 		svc:      svc,
@@ -36,9 +38,30 @@ func NewAccountHandler(svc services.AccountService, validate *validator.Validate
 }
 
 // CreateAccount handles POST /v1/accounts
+//
+// Calls auth-svc POST /auth/inspect to verify the caller has ADMIN or TELLER role.
+// This demonstrates inter-service communication using pkg/httpclient.
 func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "CreateAccount")
 	defer span.End()
+
+	// ── Inter-service call: verify caller role via auth-svc ───────────────────
+	token := r.Header.Get("Authorization")
+	if len(token) > 7 && token[:7] == "Bearer " {
+		token = token[7:]
+	}
+	if token != "" {
+		userInfo, err := h.authClient.Inspect(ctx, token)
+		if err != nil {
+			observability.RecordError(ctx, err)
+			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "could not verify caller identity")
+			return
+		}
+		if !userInfo.HasRole("ADMIN", "TELLER") {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "only ADMIN or TELLER roles can create accounts")
+			return
+		}
+	}
 
 	var req dto.CreateAccountRequest
 	if err := decodeJSON(r, &req); err != nil {
