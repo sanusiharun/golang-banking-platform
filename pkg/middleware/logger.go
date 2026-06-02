@@ -63,7 +63,14 @@ func RequestLogger(next http.Handler) http.Handler {
 			)
 		}
 
-		slog.InfoContext(ctx, "request", attrs...)
+		switch {
+		case ww.status >= 500:
+			slog.ErrorContext(ctx, "request", attrs...)
+		case ww.status >= 400:
+			slog.WarnContext(ctx, "request", attrs...)
+		default:
+			slog.InfoContext(ctx, "request", attrs...)
+		}
 	})
 }
 

@@ -44,7 +44,7 @@ Open `services/auth-svc/.env` and fill in:
 
 | Key | Value |
 |-----|-------|
-| `AUTH_DB_PASSWORD` | `auth_svc_pass_local` (from CREDENTIALS.txt) |
+| `DB_PASSWORD` | `auth_svc_pass_local` (from CREDENTIALS.txt) |
 | `JWT_PRIVATE_KEY_B64` | Generate with `make gen-keys` or copy from a teammate |
 | `JWT_PUBLIC_KEY_B64` | Same key pair as above |
 
@@ -60,7 +60,7 @@ Open `services/account-svc/.env` and fill in:
 
 | Key | Value |
 |-----|-------|
-| `ACCOUNT_DB_PASSWORD` | `account_svc_pass_local` (from CREDENTIALS.txt) |
+| `DB_PASSWORD` | `account_svc_pass_local` (from CREDENTIALS.txt) |
 | `JWT_PUBLIC_KEY_B64` | **Copy exactly** from `services/auth-svc/.env` — must match |
 
 > account-svc holds the **public key only**. It verifies tokens but cannot issue them.

@@ -35,12 +35,12 @@ route:
 receivers:
   - name: "discord-critical"
     webhook_configs:
-      - url: "http://alertmanager-discord:9094/alert"
+      - url: "http://alertmanager-discord:9094"
         send_resolved: true
 
   - name: "discord-warning"
     webhook_configs:
-      - url: "http://alertmanager-discord:9094/alert"
+      - url: "http://alertmanager-discord:9094"
         send_resolved: true
 
 # ── Inhibition rules ──────────────────────────────────────────────────────────

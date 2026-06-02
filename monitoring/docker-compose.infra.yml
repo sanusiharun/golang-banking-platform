@@ -90,7 +90,8 @@ services:
     container_name: banking-alertmanager-discord
     restart: unless-stopped
     environment:
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
+      DISCORD_WEBHOOK: ${DISCORD_WEBHOOK_URL}
+      DISCORD_USERNAME: "Alertmanager"
     ports:
       - "9094:9094"
     networks:

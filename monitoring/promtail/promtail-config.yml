@@ -53,6 +53,9 @@ scrape_configs:
         target_label: stream
 
     pipeline_stages:
+      # Drop non-JSON lines (compiler output, blank lines)
+      - drop:
+          expression: "^[^{]"
       - json:
           expressions:
             level:    level
@@ -62,8 +65,6 @@ scrape_configs:
       - labels:
           level:
           trace_id:
-      # Metrics/health paths are already suppressed in RequestLogger middleware.
-      # No drop stage needed here.
       - timestamp:
           source: time
           format: RFC3339Nano
@@ -88,6 +89,9 @@ scrape_configs:
           __path__: /var/log/banking/auth-svc.log
 
     pipeline_stages:
+      # Drop non-JSON lines (e.g. compiler output from go run: "ld: warning", "# github.com/...")
+      - drop:
+          expression: "^[^{]"
       - json:
           expressions:
             level:    level
@@ -97,8 +101,6 @@ scrape_configs:
       - labels:
           level:
           trace_id:
-      # Metrics/health paths are already suppressed in RequestLogger middleware.
-      # No drop stage needed here.
       - timestamp:
           source: time
           format: RFC3339Nano
