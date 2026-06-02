@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/database"
+	"github.com/sanusi/banking/pkg/featureflag"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
 	svcconfig "github.com/sanusi/banking/services/account-svc/config"
@@ -81,11 +82,14 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
+	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
+	ffClient := featureflag.New(cfg.FliptURL, "default")
+
 	// ── Repositories & services ───────────────────────────────────────────────
 	accountRepo := repository.NewAccountRepository(db)
 	validate := validator.New()
 	accountSvc := services.NewAccountService(accountRepo)
-	accountHandler := transport.NewAccountHandler(accountSvc, validate)
+	accountHandler := transport.NewAccountHandler(accountSvc, validate, ffClient)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()

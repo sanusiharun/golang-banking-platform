@@ -47,6 +47,9 @@ type Config struct {
 
 	// Token store
 	TokenStore    string // "postgres" | "redis" | "memory"
+
+	// Feature flags — optional, returns defaults if empty or unreachable
+	FliptURL string
 	RedisAddr     string
 	RedisPassword string
 
@@ -88,6 +91,7 @@ func Load() (*Config, error) {
 		JWTSubjectKeyB64:       getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
 		BCryptCost:             getEnvInt("BCRYPT_COST", 12),
 		TokenStore:             getEnv("TOKEN_STORE", "postgres"),
+		FliptURL:               getEnv("FLIPT_URL", ""),
 		RedisAddr:              getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:          getEnv("REDIS_PASSWORD", ""),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
+	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/account-svc/internal/services"
@@ -16,16 +17,18 @@ import (
 
 // AccountHandler holds dependencies for account HTTP handlers.
 type AccountHandler struct {
+	flags    *featureflag.Client
 	tr       *observability.ServiceTracer
 	svc      services.AccountService
 	validate *validator.Validate
 }
 
-func NewAccountHandler(svc services.AccountService, validate *validator.Validate) *AccountHandler {
+func NewAccountHandler(svc services.AccountService, validate *validator.Validate, flags *featureflag.Client) *AccountHandler {
 	return &AccountHandler{
 		tr:       observability.NewServiceTracer("AccountHandler"),
 		svc:      svc,
 		validate: validate,
+		flags:    flags,
 	}
 }
 
@@ -55,6 +58,10 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetAccount handles GET /v1/accounts/{id}
+//
+// Feature flag: "show_account_metadata"
+//   enabled  → response includes metadata field with extra info
+//   disabled → standard response (default)
 func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "GetAccount")
 	defer span.End()
@@ -65,6 +72,22 @@ func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 		writeServiceError(w, r, err)
 		return
 	}
+
+	// Feature flag: enrich response with metadata when flag is enabled.
+	// Toggle in Flipt UI → http://localhost:8082 → flag key: show_account_metadata
+	if h.flags.IsEnabled(ctx, "show_account_metadata", false) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"data": resp,
+			"metadata": map[string]any{
+				"feature_flags": map[string]bool{
+					"show_account_metadata": true,
+				},
+				"api_version": "v2",
+			},
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 

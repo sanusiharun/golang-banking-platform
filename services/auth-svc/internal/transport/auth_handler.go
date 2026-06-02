@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
+	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/auth-svc/internal/services"
@@ -14,23 +15,36 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
+	flags    *featureflag.Client
 	tr       *observability.ServiceTracer
 	svc      services.AuthService
 	validate *validator.Validate
 }
 
-func NewAuthHandler(svc services.AuthService, validate *validator.Validate) *AuthHandler {
+func NewAuthHandler(svc services.AuthService, validate *validator.Validate, flags *featureflag.Client) *AuthHandler {
 	return &AuthHandler{
 		tr:       observability.NewServiceTracer("AuthHandler"),
 		svc:      svc,
 		validate: validate,
+		flags:    flags,
 	}
 }
 
 // Login handles POST /auth/login.
+//
+// Feature flag: "maintenance_mode"
+//   enabled  → returns 503 Service Unavailable, login is blocked
+//   disabled → normal login flow (default)
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Login")
 	defer span.End()
+
+	// Feature flag: block all logins during maintenance window.
+	// Toggle in Flipt UI → http://localhost:8082 → flag key: maintenance_mode
+	if h.flags.IsEnabled(ctx, "maintenance_mode", false) {
+		writeError(w, http.StatusServiceUnavailable, "MAINTENANCE_MODE", "service is temporarily unavailable for maintenance")
+		return
+	}
 
 	var req dto.LoginRequest
 	if err := decodeJSON(r, &req); err != nil {

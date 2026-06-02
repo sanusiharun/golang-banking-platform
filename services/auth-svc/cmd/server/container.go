@@ -15,6 +15,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/sanusi/banking/pkg/database"
+	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/observability"
 	svcconfig "github.com/sanusi/banking/services/auth-svc/config"
 	"github.com/sanusi/banking/services/auth-svc/internal/repository"
@@ -96,7 +97,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		BCryptCost:           cfg.BCryptCost,
 	})
 
-	authHandler := transport.NewAuthHandler(authSvc, validate)
+	ffClient := featureflag.New(cfg.FliptURL, "default")
+	authHandler := transport.NewAuthHandler(authSvc, validate, ffClient)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()

@@ -50,6 +50,9 @@ type Config struct {
 
 	// Rate limiting
 	RateLimitRPS   int
+
+	// Feature flags — optional, returns defaults if empty or unreachable
+	FliptURL string
 	RateLimitBurst int
 
 	// Observability
@@ -101,6 +104,7 @@ func Load() (*Config, error) {
 		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
 		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
 		RateLimitRPS:     getEnvInt("RATE_LIMIT_RPS", 1000),
+		FliptURL:         getEnv("FLIPT_URL", ""),
 		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
 		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),
