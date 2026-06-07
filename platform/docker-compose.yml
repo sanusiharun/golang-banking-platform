@@ -62,7 +62,7 @@ services:
     container_name: platform-flipt
     restart: unless-stopped
     ports:
-      - "8082:8080"   # UI + REST API
+      - "8085:8080"   # UI + REST API (8082 reserved for auth-svc)
       - "9000:9000"   # gRPC
     environment:
       FLIPT_DB_URL: "file:/var/opt/flipt/flipt.db"

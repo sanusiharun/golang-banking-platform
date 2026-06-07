@@ -4,5 +4,4 @@ use (
 	./pkg
 	./services/account-svc
 	./services/auth-svc
-	pkg/httpclient/example
 )

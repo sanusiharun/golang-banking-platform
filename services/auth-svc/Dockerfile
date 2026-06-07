@@ -33,6 +33,6 @@ COPY --from=builder /bin/auth-svc /auth-svc
 
 USER nonroot:nonroot
 
-EXPOSE 8082
+EXPOSE 8080
 
 ENTRYPOINT ["/auth-svc"]
