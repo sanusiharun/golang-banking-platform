@@ -15,6 +15,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/featureflag"
+	"github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
@@ -32,9 +33,10 @@ type AccountHandler struct {
 
 func NewAccountHandler(svc services.AccountService, validate *validator.Validate, authClient *authclient.Client) *AccountHandler {
 	return &AccountHandler{
-		tr:       observability.NewServiceTracer("AccountHandler"),
-		svc:      svc,
-		validate: validate,
+		tr:         observability.NewServiceTracer("AccountHandler"),
+		svc:        svc,
+		validate:   validate,
+		authClient: authClient,
 	}
 }
 
@@ -46,22 +48,12 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "CreateAccount")
 	defer span.End()
 
-	// ── Inter-service call: verify caller role via auth-svc ───────────────────
-	token := r.Header.Get("Authorization")
-	if len(token) > 7 && token[:7] == "Bearer " {
-		token = token[7:]
-	}
-	if token != "" {
-		userInfo, err := h.authClient.Inspect(ctx, token)
-		if err != nil {
-			observability.RecordError(ctx, err)
-			writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "could not verify caller identity")
-			return
-		}
-		if !userInfo.HasRole("ADMIN", "TELLER") {
-			writeError(w, http.StatusForbidden, "FORBIDDEN", "only ADMIN or TELLER roles can create accounts")
-			return
-		}
+	// ── Role check — claims already verified by Authenticate middleware ──────
+	// RequireRole on this route enforces ADMIN|TELLER before we get here,
+	// so no additional inter-service call is needed.
+	if _, ok := middleware.ClaimsFromContext(ctx); !ok {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing claims")
+		return
 	}
 
 	var req dto.CreateAccountRequest
