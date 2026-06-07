@@ -5,17 +5,18 @@ package transport
 import (
 	"context"
 	"fmt"
+	"github.com/go-chi/chi/v5"
 	"time"
 
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	_ "github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/featureflag"
-	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/pkg/observability"
+	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/account-svc/internal/services"
 )
@@ -86,8 +87,9 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 // GetAccount handles GET /v1/accounts/{id}
 //
 // Feature flag: "show_account_metadata"
-//   enabled  → response includes metadata field with extra info
-//   disabled → standard response (default)
+//
+//	enabled  → response includes metadata field with extra info
+//	disabled → standard response (default)
 func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "GetAccount")
 	defer span.End()
