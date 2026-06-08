@@ -107,7 +107,11 @@ monitoring-logs: ## Tail monitoring logs
 	docker compose -f monitoring/docker-compose.infra.yml logs -f
 
 # ─── Microservices ────────────────────────────────────────────────────────────
-services-up: ## Build and start all microservices (requires datasource-up + monitoring-up first)
+services-up: ## Build and start all microservices (requires: make datasource-up + make platform-up first)
+	@docker network inspect datasource_datasource_net > /dev/null 2>&1 || \
+		{ echo "✗ datasource_datasource_net not found. Run: make datasource-up"; exit 1; }
+	@docker network inspect banking-net > /dev/null 2>&1 || \
+		{ echo "✗ banking-net not found. Run: make platform-up"; exit 1; }
 	docker compose up -d --build
 
 services-down: ## Stop all microservices

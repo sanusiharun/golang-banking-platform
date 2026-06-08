@@ -10,6 +10,8 @@
 networks:
   banking-net:
     external: true
+  datasource_datasource_net:
+    external: true
 
 services:
 
@@ -24,6 +26,7 @@ services:
     restart: unless-stopped
     networks:
       - banking-net
+      - datasource_datasource_net
     env_file:
       - services/auth-svc/.env
     environment:
@@ -51,6 +54,7 @@ services:
     restart: unless-stopped
     networks:
       - banking-net
+      - datasource_datasource_net
     depends_on:
       auth-svc:
         condition: service_started
