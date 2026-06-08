@@ -1,4 +1,4 @@
-.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto help
+.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -174,6 +174,29 @@ migrate-account: ## Run account-svc SQL migrations against banking_accounts
 	@echo "✓ account-svc migrations complete"
 
 migrate: migrate-auth migrate-account ## Run ALL migrations (auth + account)
+
+# ─── Performance testing — k6 ────────────────────────────────────────────────
+k6-up: ## Start k6 dashboard stack (InfluxDB + Grafana at http://localhost:3001)
+	docker compose -f performance-test-k6/docker-compose.yml up -d influxdb grafana
+
+k6-down: ## Stop k6 dashboard stack
+	docker compose -f performance-test-k6/docker-compose.yml down
+
+k6-smoke: ## Smoke test all flows (1 VU, 1 iteration — quick sanity check)
+	k6 run -e SCENARIO=smoke performance-test-k6/auth-flow.js
+	k6 run -e SCENARIO=smoke performance-test-k6/account-flow.js
+
+k6-load: ## Load test all flows with InfluxDB output (requires make k6-up first)
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/auth-flow.js
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/account-flow.js
+
+k6-stress: ## Stress test all flows with InfluxDB output (requires make k6-up first)
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 /scripts/auth-flow.js
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 /scripts/account-flow.js
 
 # ─── Local run (logs piped to ./logs/*.log for Promtail to scrape) ───────────
 #

@@ -1,0 +1,115 @@
+# performance-test-k6/docker-compose.yml
+#
+# Runs k6 with InfluxDB v2 + Grafana for real-time dashboard during load tests.
+#
+# Usage:
+#   cd golang-banking-platform
+#
+#   # Start dashboard stack
+#   docker compose -f performance-test-k6/docker-compose.yml up -d influxdb grafana
+#
+#   # Run a test (outputs to InfluxDB for live Grafana view)
+#   docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+#     run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 \
+#     /scripts/auth-flow.js
+#
+#   # Stop dashboard
+#   docker compose -f performance-test-k6/docker-compose.yml down
+#
+# Grafana dashboard: http://localhost:3001 (admin / k6password)
+# Use the pre-built "k6 Load Testing Results" dashboard (ID: 2587).
+
+networks:
+  banking-net:
+    external: true   # services must be running — make services-up first
+  k6-net:
+    name: k6-net
+    driver: bridge
+
+volumes:
+  influxdb-data:
+  grafana-k6-data:
+
+services:
+
+  # ── InfluxDB v2 — time-series store for k6 metrics ───────────────────────
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: k6-influxdb
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE:        setup
+      DOCKER_INFLUXDB_INIT_USERNAME:    k6
+      DOCKER_INFLUXDB_INIT_PASSWORD:    k6password
+      DOCKER_INFLUXDB_INIT_ORG:         banking
+      DOCKER_INFLUXDB_INIT_BUCKET:      k6
+      DOCKER_INFLUXDB_INIT_RETENTION:   7d
+    volumes:
+      - influxdb-data:/var/lib/influxdb2
+    networks:
+      - k6-net
+    healthcheck:
+      test: ["CMD", "influx", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ── Grafana — live dashboard during test runs ─────────────────────────────
+  # Open http://localhost:3001
+  # Import dashboard ID 2587 ("k6 Load Testing Results") on first run.
+  # Data source: InfluxDB → http://k6-influxdb:8086 bucket=k6 org=banking
+  grafana:
+    image: grafana/grafana:latest
+    container_name: k6-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: k6password
+      GF_AUTH_ANONYMOUS_ENABLED:  "true"
+    volumes:
+      - grafana-k6-data:/var/lib/grafana
+    networks:
+      - k6-net
+    depends_on:
+      influxdb:
+        condition: service_healthy
+
+  # ── k6 — test runner (run manually via docker compose run) ───────────────
+  # This service is NOT started with `up` — invoke with `docker compose run`.
+  # It joins both k6-net (for InfluxDB) and banking-net (to reach services).
+  #
+  # Examples:
+  #   Smoke test:
+  #   docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+  #     run -e SCENARIO=smoke /scripts/auth-flow.js
+  #
+  #   Load test with InfluxDB output:
+  #   docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+  #     run -e SCENARIO=load \
+  #     --out influxdb=http://k6-influxdb:8086/k6 \
+  #     /scripts/account-flow.js
+  #
+  #   Override service URLs (inside Docker, use container names):
+  #   docker compose -f performance-test-k6/docker-compose.yml run --rm \
+  #     -e AUTH_URL=http://banking-auth-svc:8082 \
+  #     -e ACCOUNT_URL=http://banking-account-svc:8081 \
+  #     k6 run -e SCENARIO=load /scripts/account-flow.js
+  k6:
+    image: grafana/k6:latest
+    container_name: k6-runner
+    volumes:
+      - .:/scripts:ro    # mounts performance-test-k6/ as /scripts inside container
+    networks:
+      - k6-net
+      - banking-net
+    environment:
+      # Default targets — override with -e at runtime for Docker container names
+      AUTH_URL:    http://banking-auth-svc:8082
+      ACCOUNT_URL: http://banking-account-svc:8081
+    profiles:
+      - runner   # prevents accidental start with `up -d`

@@ -1,29 +1,32 @@
 /**
  * lib/config.js
  * ─────────────────────────────────────────────────────────────
- * Dynamic environment config — semua via env variable saat run.
- * File ini tidak perlu diubah untuk ganti environment atau URL.
+ * Dynamic environment config — all values injected via -e at runtime.
  *
  * HOW TO RUN:
- *   # Local (default)
- *   k6 run performance-test-k6/project-a/my-flow.js
+ *   # Local (default) — targets Docker ports
+ *   k6 run performance-test-k6/auth-flow.js
+ *   k6 run performance-test-k6/account-flow.js
  *
- *   # Staging — pass URL langsung
- *   k6 run -e BASE_URL=https://staging.api.com performance-test-k6/project-a/my-flow.js
+ *   # Staging
+ *   k6 run -e AUTH_URL=https://auth.staging.api.com \
+ *           -e ACCOUNT_URL=https://account.staging.api.com \
+ *           performance-test-k6/account-flow.js
  *
- *   # Staging dengan auth
- *   k6 run -e BASE_URL=https://staging.api.com -e BEARER_TOKEN=xxx performance-test-k6/project-a/my-flow.js
- *
- *   # Custom header tambahan (misal API key)
- *   k6 run -e BASE_URL=https://staging.api.com -e API_KEY=abc123 performance-test-k6/project-a/my-flow.js
+ *   # Skip login — inject token directly
+ *   k6 run -e BEARER_TOKEN=<token> performance-test-k6/account-flow.js
  */
 
-// URL wajib di-pass via -e BASE_URL — tidak ada hardcode
-export const BASE_URL = __ENV.BASE_URL || "http://localhost:8089";
+// Per-service base URLs — services run on separate ports
+export const AUTH_URL    = __ENV.AUTH_URL    || "http://localhost:8082";
+export const ACCOUNT_URL = __ENV.ACCOUNT_URL || "http://localhost:8081";
 
-// Label untuk logging — otomatis detect dari URL
-export const ENV_LABEL = __ENV.BASE_URL
-  ? (__ENV.BASE_URL.includes("staging") ? "STAGING" : "REMOTE")
+// Kept for TEMPLATE.js backward compatibility
+export const BASE_URL = __ENV.BASE_URL || AUTH_URL;
+
+// Label for log output — auto-detected from URL
+export const ENV_LABEL = (__ENV.AUTH_URL || __ENV.ACCOUNT_URL || __ENV.BASE_URL)
+  ? ((__ENV.AUTH_URL || "").includes("staging") ? "STAGING" : "REMOTE")
   : "LOCAL";
 
 /**
