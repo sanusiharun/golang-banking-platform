@@ -2,8 +2,11 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/go-playground/validator/v10"
 
 	pkgerrors "github.com/sanusi/banking/pkg/errors"
 )
@@ -68,6 +71,24 @@ func WriteSuccessPaginated[T any](w http.ResponseWriter, r *http.Request, data T
 		Meta:      meta,
 		RequestID: requestIDFromRequest(r),
 		Timestamp: time.Now().UTC(),
+	})
+}
+
+// WriteValidationError writes a 422 Unprocessable Entity response with
+// field-level details extracted from a go-playground/validator error.
+func WriteValidationError(w http.ResponseWriter, r *http.Request, err error) {
+	details := make(map[string]string)
+	var ve validator.ValidationErrors
+	if errors.As(err, &ve) {
+		for _, fe := range ve {
+			details[fe.Field()] = fe.Tag()
+		}
+	}
+	writeErrorResponse(w, r, &HTTPError{
+		StatusCode: http.StatusUnprocessableEntity,
+		Code:       "VALIDATION_ERROR",
+		Message:    "request validation failed",
+		Details:    details,
 	})
 }
 
