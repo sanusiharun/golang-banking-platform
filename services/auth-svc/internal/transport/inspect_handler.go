@@ -9,6 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	pkgcrypto "github.com/sanusi/banking/pkg/crypto"
+	"github.com/sanusi/banking/pkg/httpx"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 )
 
@@ -59,12 +60,12 @@ type inspectResponse struct {
 //	{"success":true,"data":{"user_id":"usr_admin_001","subject_encrypted":"...","roles":[...],...}}
 func (h *InspectHandler) Inspect(w http.ResponseWriter, r *http.Request) {
 	var req inspectRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "INVALID_JSON", err.Error()))
 		return
 	}
 	if req.Token == "" {
-		writeError(w, http.StatusBadRequest, "MISSING_TOKEN", "token is required")
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "MISSING_TOKEN", "token is required"))
 		return
 	}
 
@@ -86,7 +87,7 @@ func (h *InspectHandler) Inspect(w http.ResponseWriter, r *http.Request) {
 			expired = true
 		} else {
 			// Bad signature, wrong algorithm, malformed token, etc.
-			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
+			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "INVALID_TOKEN", err.Error()))
 			return
 		}
 	}
@@ -108,7 +109,7 @@ func (h *InspectHandler) Inspect(w http.ResponseWriter, r *http.Request) {
 		expiresAt = claims.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 
-	writeJSON(w, http.StatusOK, inspectResponse{
+	httpx.WriteSuccess(w, r, inspectResponse{
 		UserID:           userID,
 		SubjectEncrypted: claims.Subject,
 		TenantID:         claims.TenantID,

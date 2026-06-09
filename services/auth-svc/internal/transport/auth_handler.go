@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/pkg/featureflag"
+	"github.com/sanusi/banking/pkg/httpx"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/auth-svc/internal/services"
@@ -15,7 +16,6 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-
 	tr       *observability.ServiceTracer
 	svc      services.AuthService
 	validate *validator.Validate
@@ -32,28 +32,29 @@ func NewAuthHandler(svc services.AuthService, validate *validator.Validate) *Aut
 // Login handles POST /auth/login.
 //
 // Feature flag: "maintenance_mode"
-//   enabled  → returns 503 Service Unavailable, login is blocked
-//   disabled → normal login flow (default)
+//
+//	enabled  → returns 503 Service Unavailable, login is blocked
+//	disabled → normal login flow (default)
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Login")
 	defer span.End()
 
 	// Feature flag: block all logins during maintenance window.
-	// Toggle in Flipt UI → http://localhost:8082 → flag key: maintenance_mode
+	// Toggle in Flipt UI → http://localhost:8085 → flag key: maintenance_mode
 	if featureflag.IsEnabled(ctx, "maintenance_mode", false) {
-		writeError(w, http.StatusServiceUnavailable, "MAINTENANCE_MODE", "service is temporarily unavailable for maintenance")
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusServiceUnavailable, "MAINTENANCE_MODE", "service is temporarily unavailable for maintenance"))
 		return
 	}
 
 	var req dto.LoginRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := httpx.DecodeJSON(r, &req); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "INVALID_JSON", err.Error()))
 		return
 	}
 	if err := h.validate.Struct(&req); err != nil {
 		observability.RecordError(ctx, err)
-		writeValidationError(w, err)
+		httpx.WriteValidationError(w, r, err)
 		return
 	}
 
@@ -61,14 +62,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		observability.RecordError(ctx, err)
 		if errors.Is(err, services.ErrInvalidCredentials) {
-			writeError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error())
+			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error()))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "an unexpected error occurred")
+		httpx.WriteHTTPError(w, r, httpx.ErrInternal)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteSuccess(w, r, resp)
 }
 
 // Refresh handles POST /auth/refresh.
@@ -77,14 +78,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	var req dto.RefreshRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := httpx.DecodeJSON(r, &req); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "INVALID_JSON", err.Error()))
 		return
 	}
 	if err := h.validate.Struct(&req); err != nil {
 		observability.RecordError(ctx, err)
-		writeValidationError(w, err)
+		httpx.WriteValidationError(w, r, err)
 		return
 	}
 
@@ -92,14 +93,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		observability.RecordError(ctx, err)
 		if errors.Is(err, services.ErrInvalidToken) {
-			writeError(w, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", err.Error())
+			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", err.Error()))
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "an unexpected error occurred")
+		httpx.WriteHTTPError(w, r, httpx.ErrInternal)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httpx.WriteSuccess(w, r, resp)
 }
 
 // Logout handles POST /auth/logout.
@@ -108,22 +109,22 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	var req dto.LogoutRequest
-	if err := decodeJSON(r, &req); err != nil {
+	if err := httpx.DecodeJSON(r, &req); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "INVALID_JSON", err.Error()))
 		return
 	}
 	if err := h.validate.Struct(&req); err != nil {
 		observability.RecordError(ctx, err)
-		writeValidationError(w, err)
+		httpx.WriteValidationError(w, r, err)
 		return
 	}
 
 	if err := h.svc.Logout(ctx, &req); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "an unexpected error occurred")
+		httpx.WriteHTTPError(w, r, httpx.ErrInternal)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
+	httpx.WriteSuccess(w, r, map[string]string{"message": "logged out"})
 }
