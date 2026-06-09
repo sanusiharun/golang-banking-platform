@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/sanusi/banking/pkg/httpx"
 )
 
 // DebugHandler exposes test endpoints for local development only.
@@ -28,7 +30,7 @@ func (h *DebugHandler) Ping(w http.ResponseWriter, r *http.Request) {
 		slog.String("endpoint", "/debug/ping"),
 		slog.String("remote_addr", r.RemoteAddr),
 	)
-	writeJSON(w, http.StatusOK, map[string]string{
+	httpx.WriteSuccess(w, r, map[string]string{
 		"status":  "ok",
 		"message": "pong",
 	})
@@ -40,7 +42,7 @@ func (h *DebugHandler) Warn(w http.ResponseWriter, r *http.Request) {
 		slog.String("endpoint", "/debug/warn"),
 		slog.String("hint", "this is a test warning — check Grafana logs"),
 	)
-	writeJSON(w, http.StatusOK, map[string]string{
+	httpx.WriteSuccess(w, r, map[string]string{
 		"status":  "ok",
 		"message": "warning emitted — check Grafana logs",
 	})
@@ -52,10 +54,11 @@ func (h *DebugHandler) Error(w http.ResponseWriter, r *http.Request) {
 		slog.String("endpoint", "/debug/error"),
 		slog.String("hint", "this is a test error — check Alertmanager"),
 	)
-	writeJSON(w, http.StatusInternalServerError, map[string]string{
-		"status":  "error",
-		"message": "error emitted — check Prometheus alerts and Alertmanager",
-	})
+	httpx.WriteHTTPError(w, r, httpx.NewHTTPError(
+		http.StatusInternalServerError,
+		"INTERNAL_ERROR",
+		"error emitted — check Prometheus alerts and Alertmanager",
+	))
 }
 
 // Slow sleeps for 3 seconds. Use to trigger latency-based alert rules.
@@ -69,7 +72,7 @@ func (h *DebugHandler) Slow(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(r.Context(), "debug slow request completed",
 			slog.String("duration", "3s"),
 		)
-		writeJSON(w, http.StatusOK, map[string]string{
+		httpx.WriteSuccess(w, r, map[string]string{
 			"status":   "ok",
 			"message":  "slow response after 3s — check Grafana latency metrics",
 			"duration": "3s",
