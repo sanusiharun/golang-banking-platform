@@ -137,6 +137,7 @@ environment:
 - ❌ **ds_postgres not on banking-net** — datasource compose uses its own network; must `docker network connect` manually
 - ❌ **`authClient` not assigned in NewAccountHandler** — constructor accepted it but forgot `authClient: authClient` in struct literal
 - ❌ **Wrong AUTH_SVC_URL default** — config.go had `http://localhost:8080`, should be `http://localhost:8082`
+- ❌ **`FLIPT_URL` missing from docker-compose.yml overrides** — `.env` has `localhost:9051` (correct for local dev) but inside Docker containers `localhost` is the container itself; docker-compose.yml must override with `http://platform-flipt:8080` for both services
 
 ---
 
