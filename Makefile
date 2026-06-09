@@ -1,3 +1,31 @@
+# ─── Cross-platform shell ─────────────────────────────────────────────────────
+# Mac/Linux : /bin/bash is always present.
+# Windows   : Install Git for Windows (https://git-scm.com).
+#             During install choose "Git from the command line and 3rd-party
+#             software" → this adds Git's bash.exe to the system PATH.
+#             NOTE: Windows System32 bash.exe is WSL — do NOT use it here.
+#             Verify the right one is first with:  where git
+#
+# Docker-only targets (datasource-up, platform-up, services-up, monitoring-up,
+# stack-up/down, *-down, *-logs) work without bash on any shell.
+# bash is required for: build, test, lint, tidy, gen-keys, run-*, migrate-*
+ifeq ($(OS),Windows_NT)
+    # Derive bash from Git's installation to avoid picking up WSL bash.
+    # e.g. C:\Program Files\Git\cmd\git.exe  →  C:\Program Files\Git\bin\bash.exe
+    GIT_EXE   := $(shell where git 2>NUL | head -n1)
+    GIT_ROOT  := $(if $(GIT_EXE),$(patsubst %/cmd/git.exe,%,$(subst \,/,$(GIT_EXE))),)
+    GIT_BASH  := $(if $(GIT_ROOT),$(GIT_ROOT)/bin/bash.exe,)
+    ifeq ($(wildcard $(GIT_BASH)),)
+        # Git not found via where — fall back to bare bash.exe and hope PATH is right
+        SHELL := bash.exe
+    else
+        SHELL := $(GIT_BASH)
+    endif
+else
+    SHELL := /bin/bash
+endif
+.SHELLFLAGS := -c
+
 .PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
@@ -107,11 +135,7 @@ monitoring-logs: ## Tail monitoring logs
 	docker compose -f monitoring/docker-compose.infra.yml logs -f
 
 # ─── Microservices ────────────────────────────────────────────────────────────
-services-up: ## Build and start all microservices (requires: make datasource-up + make platform-up first)
-	@docker network inspect datasource_datasource_net > /dev/null 2>&1 || \
-		{ echo "✗ datasource_datasource_net not found. Run: make datasource-up"; exit 1; }
-	@docker network inspect banking-net > /dev/null 2>&1 || \
-		{ echo "✗ banking-net not found. Run: make platform-up"; exit 1; }
+services-up: ## Build and start all microservices (run make datasource-up + make platform-up first)
 	docker compose up -d --build
 
 services-down: ## Stop all microservices
