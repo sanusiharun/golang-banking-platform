@@ -3,12 +3,21 @@
 # Contains: Redis (tokens, sessions, cache, rate limiting)
 #           Flipt  (feature flags — optional, services gracefully skip if unreachable)
 #           NATS   (async messaging — optional, wire in when adding notification-svc etc.)
+#           Metabase (BI / data exploration)
 #
 # Start:    make platform-up
 # Stop:     make platform-down
 # Logs:     docker compose -f platform/docker-compose.yml logs -f
 #
 # .env is auto-loaded from platform/.env
+#
+# ── Port scheme (platform = 905x) ────────────────────────────────────────────
+#   9050  Redis
+#   9051  Flipt UI + REST API
+#   9052  Flipt gRPC
+#   9053  NATS client connections
+#   9054  NATS HTTP dashboard
+#   9055  Metabase UI
 
 networks:
   banking-net:
@@ -26,14 +35,14 @@ services:
   # ──────────────────────────────────────────────────────────────────────────
   # Redis 7 — token store, session cache, rate limiting
   # Used by: auth-svc (refresh tokens), all services (rate limit counters)
-  # CLI:  redis-cli -a <password> -p 6379
+  # CLI:  redis-cli -p 9050 -a <password>
   # ──────────────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: platform-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "9050:6379"
     command: >
       redis-server
       --appendonly yes
@@ -51,9 +60,9 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Flipt — feature flags (optional per-service)
-  # UI:   http://localhost:8082
-  # gRPC: localhost:9000
-  # REST: localhost:8082/api/v1
+  # UI:   http://localhost:9051
+  # gRPC: localhost:9052
+  # REST: localhost:9051/api/v1
   #
   # Services opt-in by setting FLIPT_URL in their .env.
   # If FLIPT_URL is empty or Flipt is unreachable, pkg/featureflag returns defaults.
@@ -63,8 +72,8 @@ services:
     container_name: platform-flipt
     restart: unless-stopped
     ports:
-      - "8085:8080"   # UI + REST API (8082 reserved for auth-svc)
-      - "9000:9000"   # gRPC
+      - "9051:8080"   # UI + REST API
+      - "9052:9000"   # gRPC
     environment:
       FLIPT_DB_URL: "file:/var/opt/flipt/flipt.db"
       FLIPT_LOG_LEVEL: warn
@@ -81,8 +90,8 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # NATS — async messaging between services
-  # Port:      4222 (client connections)
-  # Dashboard: http://localhost:8222
+  # Client:    localhost:9053
+  # Dashboard: http://localhost:9054
   #
   # Use when: account-svc publishes events → notification-svc consumes them
   # Wire in pkg/messaging when you add your first async consumer.
@@ -92,8 +101,8 @@ services:
     container_name: platform-nats
     restart: unless-stopped
     ports:
-      - "4222:4222"   # client
-      - "8222:8222"   # HTTP dashboard
+      - "9053:4222"   # client connections
+      - "9054:8222"   # HTTP dashboard
     command: ["-js", "-m", "8222"]   # -js enables JetStream (persistent messaging)
     volumes:
       - nats-data:/data
@@ -108,9 +117,9 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Metabase — data visualization & business intelligence
-  # UI:   http://localhost:3030
+  # UI:   http://localhost:9055
   #
-  # On first run, complete the setup wizard at http://localhost:3030/setup
+  # On first run, complete the setup wizard at http://localhost:9055/setup
   # Add datasource connections in Admin → Databases:
   #   • PostgreSQL: host=host.docker.internal port=5432 (banking_auth, banking_accounts)
   #   • MySQL:      host=host.docker.internal port=3306
@@ -124,7 +133,7 @@ services:
     container_name: platform-metabase
     restart: unless-stopped
     ports:
-      - "3030:3000"
+      - "9055:3000"
     environment:
       MB_DB_TYPE: h2
       MB_DB_FILE: /metabase-data/metabase.db

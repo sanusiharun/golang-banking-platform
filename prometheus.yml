@@ -14,7 +14,7 @@ alerting:
             - alertmanager:9093
 
 # ── Alert rule files ──────────────────────────────────────────────────────────
-# Rules are hot-reloadable: POST http://localhost:9090/-/reload (requires --web.enable-lifecycle)
+# Rules are hot-reloadable: POST http://localhost:9001/-/reload (requires --web.enable-lifecycle)
 rule_files:
   - "/etc/prometheus/rules/*.yml"
 
@@ -39,20 +39,20 @@ scrape_configs:
     scrape_interval: 10s
     metrics_path: /metrics
     static_configs:
-      - targets: ["host.docker.internal:8080"]
+      - targets: ["host.docker.internal:8082"]
         labels:
           service: auth-svc
           team: platform
 
-  # ── Add new microservices here following the same pattern ────────────────
-  # When running via datasource-compose:   target = {service-name}:{port}
+  # ── Add new microservices here (808x range) ──────────────────────────────
+  # When running via docker compose:   target = {container-name}:{port}
   # When running locally (make run):   target = host.docker.internal:{port}
   #
   # - job_name: "payment-svc"
   #   scrape_interval: 10s
   #   metrics_path: /metrics
   #   static_configs:
-  #     - targets: ["host.docker.internal:8080"]
+  #     - targets: ["host.docker.internal:8083"]
   #       labels:
   #         service: payment-svc
   #         team: platform
@@ -61,7 +61,7 @@ scrape_configs:
   #   scrape_interval: 10s
   #   metrics_path: /metrics
   #   static_configs:
-  #     - targets: ["host.docker.internal:8083"]
+  #     - targets: ["host.docker.internal:8084"]
   #       labels:
   #         service: notification-svc
   #         team: platform

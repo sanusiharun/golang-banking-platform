@@ -8,6 +8,16 @@
 # Logs:     docker compose -f monitoring/docker-compose.infra.yml logs -f
 #
 # .env is auto-loaded from this directory (monitoring/.env)
+#
+# ── Port scheme (monitoring = 900x) ──────────────────────────────────────────
+#   9000  Grafana UI
+#   9001  Prometheus UI + API
+#   9002  Alertmanager UI + API
+#   9003  Jaeger UI
+#   9004  Loki API
+#   9005  Discord relay (internal proxy — alertmanager → Discord)
+#   4317  OTLP gRPC  (standard wire protocol — services send traces here)
+#   4318  OTLP HTTP  (standard wire protocol)
 
 networks:
   banking-net:
@@ -24,14 +34,14 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Loki — log storage (like Prometheus but for logs)
-  # API: http://localhost:3100
+  # API: http://localhost:9004
   # ──────────────────────────────────────────────────────────────────────────
   loki:
     image: grafana/loki:3.0.0
     container_name: banking-loki
     restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "9004:3100"
     volumes:
       - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
@@ -61,8 +71,8 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Jaeger — distributed tracing
-  # UI:        http://localhost:16686
-  # OTLP gRPC: localhost:4317  ← services send traces here
+  # UI:        http://localhost:9003
+  # OTLP gRPC: localhost:4317  ← services send traces here (standard port, unchanged)
   # ──────────────────────────────────────────────────────────────────────────
   jaeger:
     image: jaegertracing/all-in-one:1.58
@@ -73,9 +83,9 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "16686:16686"   # Jaeger UI
-      - "4317:4317"     # OTLP gRPC — services send traces here
-      - "4318:4318"     # OTLP HTTP
+      - "9003:16686"   # Jaeger UI
+      - "4317:4317"    # OTLP gRPC — standard port, services send traces here
+      - "4318:4318"    # OTLP HTTP
     networks:
       - banking-net
 
@@ -93,15 +103,15 @@ services:
     restart: unless-stopped
     environment:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
-      GRAFANA_URL: ${GRAFANA_URL:-http://localhost:3000}
+      GRAFANA_URL: ${GRAFANA_URL:-http://localhost:9000}
     ports:
-      - "9094:9094"
+      - "9005:9094"
     networks:
       - banking-net
 
   # ──────────────────────────────────────────────────────────────────────────
   # Alertmanager — alert routing, deduplication, silencing
-  # UI:  http://localhost:9093
+  # UI:  http://localhost:9002
   # ──────────────────────────────────────────────────────────────────────────
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -111,7 +121,7 @@ services:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
     ports:
-      - "9093:9093"
+      - "9002:9093"
     networks:
       - banking-net
     command:
@@ -121,18 +131,13 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Prometheus — metrics scraping + alert rule evaluation
-  # UI:     http://localhost:9090
-  # Reload: POST http://localhost:9090/-/reload
+  # UI:     http://localhost:9001
+  # Reload: POST http://localhost:9001/-/reload
   # ──────────────────────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.53.0
     container_name: banking-prometheus
     restart: unless-stopped
-    # extra_hosts makes host.docker.internal resolve to the host machine IP
-    # on ALL platforms:
-    #   Mac / Windows — Docker Desktop already provides this; entry is harmless
-    #   Linux          — host-gateway resolves to the Docker bridge IP (172.17.0.1)
-    #                    without this, host.docker.internal does not exist on Linux
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -140,7 +145,7 @@ services:
       - ./alerting/rules:/etc/prometheus/rules:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "9001:9090"
     networks:
       - banking-net
     command:
@@ -153,7 +158,7 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Grafana — dashboards, alerts UI, single pane of glass
-  # UI:    http://localhost:3000
+  # UI:    http://localhost:9000
   # Login: admin / admin
   # ──────────────────────────────────────────────────────────────────────────
   grafana:
@@ -164,7 +169,7 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_SERVER_ROOT_URL: http://localhost:3000
+      GF_SERVER_ROOT_URL: http://localhost:9000
       GF_UNIFIED_ALERTING_ENABLED: "true"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
@@ -173,7 +178,7 @@ services:
       - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     ports:
-      - "3000:3000"
+      - "9000:3000"
     networks:
       - banking-net
     depends_on:
