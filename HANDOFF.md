@@ -85,6 +85,10 @@ environment:
 - AES-256-GCM Subject claim encryption (`JWT_SUBJECT_ENCRYPTION_KEY`)
 - Feature flag: `maintenance_mode` (blocks login via Flipt)
 - HTTP_PORT=8082
+- Service accounts + API key management (CRUD via `/internal/service-accounts/*`)
+- API key format: `bp_test_<32 base62>` (non-prod) / `bp_live_<32 base62>` (prod) — 40 chars, SHA-256 hashed, raw key shown once and never stored
+- `/auth/apikey/introspect` — resolves hash → ServiceAccountIdentity (used by downstream services)
+- Redis cache-aside for API key lookups (`apikey:{hash}` → identity, 5-min TTL, immediate invalidation on revoke)
 
 **account-svc**
 - JWT verification (public key only)
@@ -92,6 +96,10 @@ environment:
 - Feature flag: `show_account_metadata`, `banking_operation_hours`
 - Claims read from context (not inter-service inspect call)
 - HTTP_PORT=8081
+- `AuthenticateAny` middleware: accepts both `Authorization: Bearer <jwt>` and `X-API-Key: bp_*` / `Authorization: ApiKey <key>`
+- API key lookup: Redis-first (`apikey:{hash}`) → HTTP introspect fallback → Redis write-back on miss
+- Self-healing: Redis empty + services restart → lazy cache repopulation on first request
+- `REDIS_ADDR` / `REDIS_PASSWORD` config; Redis unavailable = graceful fallback, no hard dependency
 
 **pkg/httpx consolidation (DONE — single response style)**
 - Both services deleted their local `transport/response.go` duplicate code
@@ -138,6 +146,8 @@ environment:
 - ❌ **`authClient` not assigned in NewAccountHandler** — constructor accepted it but forgot `authClient: authClient` in struct literal
 - ❌ **Wrong AUTH_SVC_URL default** — config.go had `http://localhost:8080`, should be `http://localhost:8082`
 - ❌ **`FLIPT_URL` missing from docker-compose.yml overrides** — `.env` has `localhost:9051` (correct for local dev) but inside Docker containers `localhost` is the container itself; docker-compose.yml must override with `http://platform-flipt:8080` for both services
+- ❌ **Wrong Redis port in account-svc `.env`** — Redis host port is `9050` (not `6379`); inside Docker the override `platform-redis:6379` is correct (internal port), but local `.env` must use `localhost:9050`
+- ❌ **`REDIS_PASSWORD` missing from account-svc** — Redis has `requirepass`; must set `REDIS_PASSWORD=redispassword` in `.env` and `${REDIS_PASSWORD}` override in docker-compose.yml (sourced from root `.env`)
 
 ---
 
@@ -161,6 +171,7 @@ curl -X POST http://localhost:8082/auth/login \
 Install from https://git-scm.com — choose **"Git from the command line and 3rd-party software"** so `bash.exe` lands in PATH. Then all Makefile targets work from PowerShell.
 
 ### 3. Pending features (priority order)
+- [ ] **API key cache warm-up** — on auth-svc startup, pre-populate `apikey:{hash}` in Redis for all active keys from PostgreSQL; avoids cold-start under load when both services restart simultaneously
 - [ ] **Kubernetes migration** — was discussed but not started; services are Docker-only right now
 - [ ] **payment-svc** — next microservice; port 8083, same Dockerfile pattern as auth-svc/account-svc
 - [ ] **notification-svc** — consumes NATS events from account-svc; port 8084
