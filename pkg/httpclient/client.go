@@ -217,6 +217,18 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any,
 		respBody, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
+		// HTTP 409 with IDEMPOTENCY_IN_FLIGHT — transient; retry with fixed 100ms delay.
+		// All other 409s remain non-retryable (e.g. duplicate username conflict).
+		if resp.StatusCode == http.StatusConflict && strings.Contains(string(respBody), "IDEMPOTENCY_IN_FLIGHT") {
+			if attempt < maxAttempts-1 {
+				if sleepErr := sleep(ctx, 100*time.Millisecond); sleepErr != nil {
+					return sleepErr
+				}
+				continue
+			}
+			return fmt.Errorf("%w: HTTP 409 IDEMPOTENCY_IN_FLIGHT after %d attempts", ErrRetriesExhausted, maxAttempts)
+		}
+
 		// HTTP 4xx — non-transient, fail immediately
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
 			return fmt.Errorf("%w: HTTP %d: %s", ErrNonTransient, resp.StatusCode, summarize(respBody))
