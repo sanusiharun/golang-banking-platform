@@ -13,11 +13,12 @@ import (
 
 // RouterConfig holds all dependencies for the auth-svc router.
 type RouterConfig struct {
-	AuthHandler *AuthHandler
-	Health      *observability.HealthHandler
-	Environment string
+	AuthHandler   *AuthHandler
+	APIKeyHandler *APIKeyHandler
+	Health        *observability.HealthHandler
+	Environment   string
 
-	// Used by InspectHandler (local dev only).
+	// JWT validation — used to protect internal/admin routes.
 	PublicKey  *rsa.PublicKey
 	SubjectKey []byte
 	Issuer     string
@@ -25,10 +26,10 @@ type RouterConfig struct {
 
 // NewRouter builds the auth-svc chi router.
 //
-// All routes except health and metrics are public by design —
-// auth-svc's job IS to authenticate, so it cannot protect itself with JWT.
-//
-// In local environment only, POST /auth/inspect is registered for debugging tokens.
+// Route groups:
+//   - /auth/*          — public (no auth); auth-svc's job IS to authenticate
+//   - /internal/*      — JWT-protected, admin role required; service account management
+//   - /healthz/, /metrics — always public
 func NewRouter(cfg RouterConfig) http.Handler {
 	r := chi.NewRouter()
 
@@ -46,12 +47,37 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Handle("/metrics", pkgmiddleware.PrometheusHandler())
 
 	// ── Auth endpoints (public) ───────────────────────────────────────────────
-	r.Post("/auth/login",   cfg.AuthHandler.Login)
+	r.Post("/auth/login", cfg.AuthHandler.Login)
 	r.Post("/auth/refresh", cfg.AuthHandler.Refresh)
-	r.Post("/auth/logout",  cfg.AuthHandler.Logout)
+	r.Post("/auth/logout", cfg.AuthHandler.Logout)
+
+	// ── Internal / admin endpoints (JWT + admin role required) ───────────────
+	// Service account and API key management must be done by human admins,
+	// not by service accounts themselves (bootstrapping concern).
+	if cfg.APIKeyHandler != nil {
+		jwtCfg := pkgmiddleware.JWTConfig{
+			PublicKey:  cfg.PublicKey,
+			Issuer:     cfg.Issuer,
+			SubjectKey: cfg.SubjectKey,
+		}
+		r.Group(func(r chi.Router) {
+			r.Use(pkgmiddleware.Authenticate(jwtCfg))
+			r.Use(pkgmiddleware.RequireRole("admin"))
+
+			// Service accounts
+			r.Get("/internal/service-accounts", cfg.APIKeyHandler.ListServiceAccounts)
+			r.Post("/internal/service-accounts", cfg.APIKeyHandler.CreateServiceAccount)
+			r.Get("/internal/service-accounts/{id}", cfg.APIKeyHandler.GetServiceAccount)
+			r.Patch("/internal/service-accounts/{id}", cfg.APIKeyHandler.UpdateServiceAccount)
+
+			// API keys (scoped under their service account)
+			r.Get("/internal/service-accounts/{id}/api-keys", cfg.APIKeyHandler.ListAPIKeys)
+			r.Post("/internal/service-accounts/{id}/api-keys", cfg.APIKeyHandler.CreateAPIKey)
+			r.Delete("/internal/service-accounts/{id}/api-keys/{keyID}", cfg.APIKeyHandler.RevokeAPIKey)
+		})
+	}
 
 	// ── Debug endpoints (local only) ──────────────────────────────────────────
-	// POST /auth/inspect — decode and decrypt a JWT for debugging
 	if cfg.Environment == "local" {
 		inspect := NewInspectHandler(cfg.PublicKey, cfg.SubjectKey, cfg.Issuer)
 		r.Post("/auth/inspect", inspect.Inspect)

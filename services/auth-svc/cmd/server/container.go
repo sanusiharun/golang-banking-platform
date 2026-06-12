@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/redis/go-redis/v9"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/sanusi/banking/pkg/database"
 	"github.com/sanusi/banking/pkg/featureflag"
+	"github.com/sanusi/banking/pkg/idempotency"
 	"github.com/sanusi/banking/pkg/observability"
 	svcconfig "github.com/sanusi/banking/services/auth-svc/config"
 	"github.com/sanusi/banking/services/auth-svc/internal/repository"
@@ -23,9 +25,14 @@ import (
 	"github.com/sanusi/banking/services/auth-svc/internal/transport"
 )
 
+// idempotencyCleanupStore is a type alias so main.go can reference DeleteExpired
+// without importing the idempotency package directly.
+type idempotencyCleanupStore = idempotency.PostgresStore
+
 type container struct {
-	server *http.Server
-	otel   *observability.Provider
+	server           *http.Server
+	otel             *observability.Provider
+	idempotencyStore *idempotencyCleanupStore // nil when Postgres store is unavailable
 }
 
 func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
@@ -84,6 +91,9 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	// ── Token store (pluggable: postgres | redis | memory) ────────────────────
 	tokenStore, redisClient := buildTokenStore(cfg, db)
 
+	// ── API Key store (postgres + optional redis cache) ────────────────────────
+	apiKeyStore, saStore := buildAPIKeyStore(cfg, db, redisClient)
+
 	// ── Wiring ────────────────────────────────────────────────────────────────
 	userRepo := repository.NewUserRepository(db)
 	validate := validator.New()
@@ -97,8 +107,11 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		BCryptCost:           cfg.BCryptCost,
 	})
 
+	apiKeySvc := services.NewAPIKeyService(saStore, apiKeyStore, cfg.Environment)
+
 	featureflag.Init(cfg.FliptURL, "default")
 	authHandler := transport.NewAuthHandler(authSvc, validate)
+	apiKeyHandler := transport.NewAPIKeyHandler(apiKeySvc, validate)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()
@@ -113,13 +126,25 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	router := transport.NewRouter(transport.RouterConfig{
-		AuthHandler: authHandler,
-		Health:      health,
-		Environment: cfg.Environment,
-		PublicKey:   &privateKey.PublicKey,
-		SubjectKey:  subjectKey,
-		Issuer:      cfg.JWTIssuer,
+		AuthHandler:   authHandler,
+		APIKeyHandler: apiKeyHandler,
+		Health:        health,
+		Environment:   cfg.Environment,
+		PublicKey:     &privateKey.PublicKey,
+		SubjectKey:    subjectKey,
+		Issuer:        cfg.JWTIssuer,
 	})
+
+	// ── Idempotency store ─────────────────────────────────────────────────────
+	pgIdempStore := idempotency.NewPostgresStore(db, 24*time.Hour)
+	var idempStore idempotency.Store
+	if redisClient != nil {
+		redisIdempStore := idempotency.NewRedisStore(redisClient, 24*time.Hour)
+		idempStore = idempotency.NewDualStore(redisIdempStore, pgIdempStore)
+	} else {
+		idempStore = pgIdempStore
+	}
+	_ = idempStore // used by account-svc and other services via middleware injection
 
 	// ── HTTP server ───────────────────────────────────────────────────────────
 	server := &http.Server{
@@ -130,7 +155,26 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
-	return &container{server: server, otel: otelProvider}, nil
+	return &container{
+		server:           server,
+		otel:             otelProvider,
+		idempotencyStore: pgIdempStore, // cleanup goroutine always uses postgres directly
+	}, nil
+}
+
+// buildAPIKeyStore wires the API key and service account stores.
+// When Redis is available, the API key store is wrapped with a Redis cache layer.
+func buildAPIKeyStore(cfg *svcconfig.Config, db *gorm.DB, redisClient *redis.Client) (repository.APIKeyStore, repository.ServiceAccountStore) {
+	saStore := repository.NewPostgresServiceAccountStore(db)
+	pgKeyStore := repository.NewPostgresAPIKeyStore(db)
+
+	if redisClient != nil {
+		slog.Info("api key store: postgres + redis cache")
+		return repository.NewRedisAPIKeyStore(pgKeyStore, redisClient), saStore
+	}
+
+	slog.Info("api key store: postgres only (no redis cache)")
+	return pgKeyStore, saStore
 }
 
 // buildTokenStore selects a TokenStore implementation based on cfg.TokenStore.

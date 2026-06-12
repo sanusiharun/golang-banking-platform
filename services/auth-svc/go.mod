@@ -9,6 +9,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/sanusi/banking/pkg v0.0.0
+	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.49.0
 	gorm.io/gorm v1.25.11
 )

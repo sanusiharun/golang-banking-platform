@@ -83,7 +83,12 @@ func run() error {
 		}
 	}()
 
-	// ── 4. Start HTTP server ──────────────────────────────────────────────────
+	// ── 4. Start background jobs ──────────────────────────────────────────────
+	if c.idempotencyStore != nil {
+		go runIdempotencyCleanup(ctx, c.idempotencyStore, cfg.ShutdownTimeout)
+	}
+
+	// ── 5. Start HTTP server ──────────────────────────────────────────────────
 	serverErrors := make(chan error, 1)
 	go func() {
 		slog.Info("http server listening", slog.String("addr", c.server.Addr))
@@ -92,7 +97,7 @@ func run() error {
 		}
 	}()
 
-	// ── 5. Wait for signal or server error ───────────────────────────────────
+	// ── 6. Wait for signal or server error ───────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 
@@ -103,7 +108,7 @@ func run() error {
 		slog.Info("shutdown signal received", slog.String("signal", sig.String()))
 	}
 
-	// ── 6. Graceful shutdown ──────────────────────────────────────────────────
+	// ── 7. Graceful shutdown ──────────────────────────────────────────────────
 	shutCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
@@ -113,4 +118,32 @@ func run() error {
 
 	slog.Info("auth-svc stopped cleanly")
 	return nil
+}
+
+// runIdempotencyCleanup deletes expired idempotency records every hour.
+// Runs until ctx is cancelled (i.e. on graceful shutdown).
+func runIdempotencyCleanup(ctx context.Context, store *idempotencyCleanupStore, _ time.Duration) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	slog.Info("idempotency cleanup goroutine started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			slog.Info("idempotency cleanup goroutine stopped")
+			return
+		case <-ticker.C:
+			deleted, err := store.DeleteExpired(ctx)
+			if err != nil {
+				slog.Error("idempotency cleanup: failed to delete expired records",
+					slog.String("error", err.Error()),
+				)
+			} else if deleted > 0 {
+				slog.Info("idempotency cleanup: deleted expired records",
+					slog.Int64("count", deleted),
+				)
+			}
+		}
+	}
 }
