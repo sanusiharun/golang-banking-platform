@@ -11,13 +11,14 @@ import (
 	"net/http"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/sanusi/banking/pkg/database"
-	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/pkg/featureflag"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
 	svcconfig "github.com/sanusi/banking/services/account-svc/config"
+	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
 	"github.com/sanusi/banking/services/account-svc/internal/repository"
 	"github.com/sanusi/banking/services/account-svc/internal/services"
 	"github.com/sanusi/banking/services/account-svc/internal/transport"
@@ -83,6 +84,25 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
+	// ── Redis (optional — API key read-through cache) ────────────────────────
+	// Same instance as auth-svc. Falls back gracefully to HTTP introspect if absent.
+	var redisClient *redis.Client
+	if cfg.RedisAddr != "" {
+		redisClient = redis.NewClient(&redis.Options{
+			Addr:     cfg.RedisAddr,
+			Password: cfg.RedisPassword,
+		})
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			slog.WarnContext(ctx, "redis ping failed — api key cache disabled, using HTTP introspect",
+				slog.String("addr", cfg.RedisAddr),
+				slog.String("error", err.Error()),
+			)
+			redisClient = nil
+		} else {
+			slog.Info("redis connected — api key cache enabled", slog.String("addr", cfg.RedisAddr))
+		}
+	}
+
 	// ── Auth service client (for inter-service calls) ────────────────────────
 	authClient := authclient.New(cfg.AuthSvcURL)
 
@@ -109,6 +129,10 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 			PublicKey:  publicKey,
 			Issuer:     cfg.JWTIssuer,
 			SubjectKey: subjectKey,
+		},
+		APIKeyConfig: pkgmiddleware.APIKeyConfig{
+			Lookup:      authclient.NewAPIKeyLookup(authClient, redisClient),
+			Environment: cfg.Environment,
 		},
 		RateLimitRPS:   cfg.RateLimitRPS,
 		RateLimitBurst: cfg.RateLimitBurst,

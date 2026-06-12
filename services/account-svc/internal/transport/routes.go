@@ -17,6 +17,7 @@ type RouterConfig struct {
 	AccountHandler *AccountHandler
 	Health         *observability.HealthHandler
 	JWTConfig      pkgmiddleware.JWTConfig
+	APIKeyConfig   pkgmiddleware.APIKeyConfig // enables API key auth alongside JWT
 	RateLimitRPS   int
 	RateLimitBurst int
 	RequestTimeout int // seconds
@@ -73,7 +74,8 @@ func NewRouter(cfg RouterConfig) http.Handler {
 			RequestsPerSecond: float64(cfg.RateLimitRPS),
 			Burst:             float64(cfg.RateLimitBurst),
 		}))
-		r.Use(pkgmiddleware.Authenticate(cfg.JWTConfig))
+		// AuthenticateAny: JWT Bearer for human users, ApiKey/X-API-Key for service accounts.
+		r.Use(pkgmiddleware.AuthenticateAny(cfg.JWTConfig, cfg.APIKeyConfig))
 
 		r.Route("/v1/accounts", func(r chi.Router) {
 			r.With(pkgmiddleware.RequireRole("ADMIN")).

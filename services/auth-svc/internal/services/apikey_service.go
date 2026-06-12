@@ -27,6 +27,11 @@ type APIKeyService interface {
 	CreateAPIKey(ctx context.Context, serviceAccountID string, req *dto.CreateAPIKeyRequest, createdBy string) (*dto.CreateAPIKeyResponse, error)
 	RevokeAPIKey(ctx context.Context, serviceAccountID, keyID string) error
 	ListAPIKeys(ctx context.Context, serviceAccountID string) ([]*dto.APIKeyResponse, error)
+
+	// IntrospectAPIKey resolves a SHA-256 hash to a ServiceAccountIdentity.
+	// Called by downstream services (e.g. account-svc) via POST /auth/apikey/introspect.
+	// Updates last_used_at asynchronously.
+	IntrospectAPIKey(ctx context.Context, hash string) (*pkgmiddleware.ServiceAccountIdentity, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
@@ -246,4 +251,24 @@ func toAPIKeyResponse(k *dao.APIKey) *dto.APIKeyResponse {
 		LastUsedAt:       k.LastUsedAt,
 		CreatedAt:        k.CreatedAt,
 	}
+}
+
+// IntrospectAPIKey resolves a SHA-256 hash into a ServiceAccountIdentity.
+// Updates last_used_at asynchronously so it doesn't block the response.
+func (s *apiKeyService) IntrospectAPIKey(ctx context.Context, hash string) (*pkgmiddleware.ServiceAccountIdentity, error) {
+	identity, err := s.keyStore.FindActiveByHash(ctx, hash)
+	if err != nil {
+		return nil, fmt.Errorf("introspect api key: %w", err)
+	}
+	go func() {
+		ctx2, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := s.keyStore.UpdateLastUsed(ctx2, identity.KeyID); err != nil {
+			slog.Warn("introspect api key: failed to update last_used_at",
+				slog.String("key_id", identity.KeyID),
+				slog.String("error", err.Error()),
+			)
+		}
+	}()
+	return identity, nil
 }

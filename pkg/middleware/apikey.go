@@ -19,11 +19,11 @@ import (
 // to build a *Claims that downstream middleware (RequireRole, UserIDFromContext)
 // can use identically to a JWT-authenticated request.
 type ServiceAccountIdentity struct {
-	ServiceAccountID string
-	TenantID         string
-	Roles            []string
-	KeyID            string     // api_keys.id — used for logging, not the hash
-	ExpiresAt        *time.Time // nil = non-expiring
+	ServiceAccountID string     `json:"service_account_id"`
+	TenantID         string     `json:"tenant_id"`
+	Roles            []string   `json:"roles"`
+	KeyID            string     `json:"key_id"` // api_keys.id — used for logging, not the hash
+	ExpiresAt        *time.Time `json:"expires_at,omitempty"` // nil = non-expiring
 }
 
 // APIKeyLookup is the minimal interface AuthenticateAPIKey requires.

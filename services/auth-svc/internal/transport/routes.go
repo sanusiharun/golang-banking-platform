@@ -51,6 +51,13 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Post("/auth/refresh", cfg.AuthHandler.Refresh)
 	r.Post("/auth/logout", cfg.AuthHandler.Logout)
 
+	// ── API key introspection — called by downstream services ────────────────
+	// Accepts a SHA-256 hash, returns ServiceAccountIdentity. No JWT required.
+	// Only reachable over the internal Docker network (banking-net).
+	if cfg.APIKeyHandler != nil {
+		r.Post("/auth/apikey/introspect", cfg.APIKeyHandler.IntrospectAPIKey)
+	}
+
 	// ── Internal / admin endpoints (JWT + admin role required) ───────────────
 	// Service account and API key management must be done by human admins,
 	// not by service accounts themselves (bootstrapping concern).
@@ -62,7 +69,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(pkgmiddleware.Authenticate(jwtCfg))
-			r.Use(pkgmiddleware.RequireRole("admin"))
+			r.Use(pkgmiddleware.RequireRole("ADMIN"))
 
 			// Service accounts
 			r.Get("/internal/service-accounts", cfg.APIKeyHandler.ListServiceAccounts)

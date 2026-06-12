@@ -19,6 +19,8 @@ import (
 	"net/http"
 	"time"
 
+	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
+
 	"github.com/sanusi/banking/pkg/httpclient"
 )
 
@@ -117,3 +119,32 @@ func (c *Client) Inspect(ctx context.Context, token string) (*UserInfo, error) {
 
 // ErrUnauthorized is returned when the token is invalid or expired.
 var ErrUnauthorized = fmt.Errorf("authclient: token is invalid or expired")
+
+// ── API key introspection ─────────────────────────────────────────────────────
+
+type introspectAPIKeyRequest struct {
+	Hash string `json:"hash"`
+}
+
+type introspectAPIKeyResponse struct {
+	Success bool                               `json:"success"`
+	Data    *pkgmiddleware.ServiceAccountIdentity `json:"data"`
+	Error   *struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+}
+
+// IntrospectAPIKey sends a SHA-256 hash to auth-svc and returns the resolved
+// ServiceAccountIdentity. Called by the APIKeyLookup adapter on every API key request.
+func (c *Client) IntrospectAPIKey(ctx context.Context, hash string) (*pkgmiddleware.ServiceAccountIdentity, error) {
+	var resp introspectAPIKeyResponse
+	err := c.http.Do(ctx, http.MethodPost, "/auth/apikey/introspect", introspectAPIKeyRequest{Hash: hash}, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("authclient.IntrospectAPIKey: %w", err)
+	}
+	if !resp.Success || resp.Data == nil {
+		return nil, ErrUnauthorized
+	}
+	return resp.Data, nil
+}

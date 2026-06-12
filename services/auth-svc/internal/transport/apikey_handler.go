@@ -138,3 +138,27 @@ func (h *APIKeyHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteNoContent(w)
 }
+
+// IntrospectAPIKey POST /auth/apikey/introspect
+// Called by downstream services to validate an API key hash and get the caller identity.
+// Accepts a SHA-256 hex hash (never the raw key). No JWT required — hash is the credential.
+func (h *APIKeyHandler) IntrospectAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Hash string `json:"hash" validate:"required,len=64"`
+	}
+	if err := httpx.DecodeJSON(r, &req); err != nil {
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusBadRequest, "INVALID_JSON", err.Error()))
+		return
+	}
+	if err := h.validate.Struct(&req); err != nil {
+		httpx.WriteValidationError(w, r, err)
+		return
+	}
+
+	identity, err := h.svc.IntrospectAPIKey(r.Context(), req.Hash)
+	if err != nil {
+		httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "INVALID_API_KEY", "invalid or expired api key"))
+		return
+	}
+	httpx.WriteSuccess(w, r, identity)
+}
