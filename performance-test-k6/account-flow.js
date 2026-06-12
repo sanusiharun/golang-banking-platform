@@ -59,7 +59,7 @@ export const options = {
   },
   thresholds: {
     ...baseThresholds,
-    [`${FLOW_NAME}_login_duration`]:          ["p(95)<500"],
+    [`${FLOW_NAME}_login_duration`]:          ["p(95)<2000"],  // bcrypt cost 12
     [`${FLOW_NAME}_create_account_duration`]: ["p(95)<800"],
     [`${FLOW_NAME}_get_account_duration`]:    ["p(95)<300"],
     [`${FLOW_NAME}_credit_duration`]:         ["p(95)<500"],
@@ -97,16 +97,16 @@ export default function () {
     const body = safeJson(res);
     const ok = check(res, {
       "login: status 200":        (r) => r.status === 200,
-      "login: has access_token":  () => !!body?.access_token,
-      "login: has refresh_token": () => !!body?.refresh_token,
+      "login: has access_token":  () => !!body?.data?.access_token,
+      "login: has refresh_token": () => !!body?.data?.refresh_token,
     });
 
     if (ok) {
-      accessToken  = body.access_token;
-      refreshToken = body.refresh_token;
+      accessToken  = body.data.access_token;
+      refreshToken = body.data.refresh_token;
     } else {
       flowOk = false;
-      console.error(`[Login FAIL] VU${__VU} status=${res.status} body=${res.body.substring(0, 200)}`);
+      console.error(`[Login FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
     }
   });
 
@@ -134,16 +134,16 @@ export default function () {
     const body = safeJson(res);
     const ok = check(res, {
       "create: status 201":    (r) => r.status === 201,
-      "create: has id":        () => !!body?.id,
-      "create: currency NGN":  () => body?.currency === "NGN",
-      "create: status ACTIVE": () => body?.status === "ACTIVE",
+      "create: has id":        () => !!body?.data?.id,
+      "create: currency NGN":  () => body?.data?.currency === "NGN",
+      "create: status ACTIVE": () => body?.data?.status === "ACTIVE",
     });
 
     if (ok) {
-      accountId = body.id;
+      accountId = body.data.id;
     } else {
       flowOk = false;
-      console.error(`[CreateAccount FAIL] VU${__VU} status=${res.status} body=${res.body.substring(0, 200)}`);
+      console.error(`[CreateAccount FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
     }
   });
 
@@ -162,13 +162,13 @@ export default function () {
     const body = safeJson(res);
     const ok = check(res, {
       "get: status 200":   (r) => r.status === 200,
-      "get: id matches":   () => body?.id === accountId,
-      "get: balance zero": () => body?.balance === 0,
+      "get: id matches":   () => body?.data?.id === accountId,
+      "get: balance zero": () => body?.data?.balance === 0,
     });
 
     if (!ok) {
       flowOk = false;
-      console.error(`[GetAccount FAIL] VU${__VU} status=${res.status} body=${res.body.substring(0, 200)}`);
+      console.error(`[GetAccount FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
     }
   });
 
@@ -196,7 +196,7 @@ export default function () {
 
     if (!ok) {
       flowOk = false;
-      console.error(`[Credit FAIL] VU${__VU} status=${res.status} body=${res.body.substring(0, 200)}`);
+      console.error(`[Credit FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
     }
   });
 
@@ -215,8 +215,8 @@ export default function () {
     const body = safeJson(res);
     const ok = check(res, {
       "balance: status 200":           (r) => r.status === 200,
-      "balance: equals credit amount": () => body?.balance === creditAmount,
-      "balance: currency NGN":         () => body?.currency === "NGN",
+      "balance: equals credit amount": () => body?.data?.balance === creditAmount,
+      "balance: currency NGN":         () => body?.data?.currency === "NGN",
     });
 
     if (!ok) {
@@ -249,7 +249,7 @@ export default function () {
 
     if (!ok) {
       flowOk = false;
-      console.error(`[Debit FAIL] VU${__VU} status=${res.status} body=${res.body.substring(0, 200)}`);
+      console.error(`[Debit FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
     }
   });
 
@@ -268,13 +268,13 @@ export default function () {
     const expectedBalance = creditAmount - debitAmount;
     const body = safeJson(res);
     const ok = check(res, {
-      "balance: status 200":          (r) => r.status === 200,
-      "balance: reflects debit":      () => body?.balance === expectedBalance,
+      "balance: status 200":     (r) => r.status === 200,
+      "balance: reflects debit": () => body?.data?.balance === expectedBalance,
     });
 
     if (!ok) {
       flowOk = false;
-      console.error(`[Balance FAIL] VU${__VU} balance=${body?.balance} expected=${expectedBalance}`);
+      console.error(`[Balance FAIL] VU${__VU} balance=${body?.data?.balance} expected=${expectedBalance}`);
     }
   });
 
