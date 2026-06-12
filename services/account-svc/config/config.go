@@ -54,6 +54,11 @@ type Config struct {
 	// Feature flags — optional, returns defaults if empty or unreachable
 	FliptURL   string
 
+	// Redis — optional, used as a read-through cache for API key lookups.
+	// If empty or unreachable, API key auth falls back to HTTP introspect on auth-svc.
+	RedisAddr     string // e.g. localhost:6379
+	RedisPassword string // empty = no password
+
 	// Downstream service URLs
 	AuthSvcURL string // e.g. http://localhost:8080
 	RateLimitBurst int
@@ -107,6 +112,8 @@ func Load() (*Config, error) {
 		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
 		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
 		RateLimitRPS:     getEnvInt("RATE_LIMIT_RPS", 1000),
+		RedisAddr:        getEnv("REDIS_ADDR", ""),
+		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
 		FliptURL:         getEnv("FLIPT_URL", ""),
 		AuthSvcURL:       getEnv("AUTH_SVC_URL", "http://localhost:8080"),
 		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),

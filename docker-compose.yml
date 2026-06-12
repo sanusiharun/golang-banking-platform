@@ -34,6 +34,7 @@ services:
       DB_HOST: ds_postgres
       OTEL_EXPORTER_OTLP_ENDPOINT: banking-jaeger:4317
       REDIS_ADDR: platform-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
       FLIPT_URL: http://platform-flipt:8080
     ports:
       - "8082:8082"
@@ -67,6 +68,8 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: banking-jaeger:4317
       AUTH_SVC_URL: http://banking-auth-svc:8082
       FLIPT_URL: http://platform-flipt:8080
+      REDIS_ADDR: platform-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     ports:
       - "8081:8081"
     healthcheck:
