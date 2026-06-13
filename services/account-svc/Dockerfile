@@ -16,6 +16,7 @@ COPY pkg/go.mod pkg/go.sum* ./pkg/
 
 COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account-svc/
 COPY services/auth-svc/go.mod services/auth-svc/go.sum* ./services/auth-svc/
+COPY services/audit-svc/go.mod services/audit-svc/go.sum* ./services/audit-svc/
 
 RUN go work sync
 
@@ -38,19 +39,12 @@ RUN cd services/account-svc && \
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 2: Runtime — distroless for minimal attack surface.
 # ──────────────────────────────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.20
 
-# Copy timezone data and CA certificates from builder.
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+RUN apk add --no-cache ca-certificates tzdata wget
 
-# Copy the statically-linked binary.
 COPY --from=builder /bin/account-svc /account-svc
 
-# Run as non-root user (UID 65532 in distroless/nonroot).
-USER nonroot:nonroot
-
-# HTTP API port and Prometheus metrics port.
-EXPOSE 8080 9090
+EXPOSE 8081
 
 ENTRYPOINT ["/account-svc"]

@@ -9,6 +9,7 @@ COPY pkg/go.mod pkg/go.sum* ./pkg/
 
 COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account-svc/
 COPY services/auth-svc/go.mod services/auth-svc/go.sum* ./services/auth-svc/
+COPY services/audit-svc/go.mod services/audit-svc/go.sum* ./services/audit-svc/
 
 RUN go work sync
 
@@ -25,14 +26,12 @@ RUN cd services/auth-svc && \
       -o /bin/auth-svc \
       ./cmd/server
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.20
 
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+RUN apk add --no-cache ca-certificates tzdata wget
+
 COPY --from=builder /bin/auth-svc /auth-svc
 
-USER nonroot:nonroot
-
-EXPOSE 8080
+EXPOSE 8082
 
 ENTRYPOINT ["/auth-svc"]
