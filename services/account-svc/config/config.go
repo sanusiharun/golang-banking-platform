@@ -63,6 +63,10 @@ type Config struct {
 	AuthSvcURL string // e.g. http://localhost:8080
 	RateLimitBurst int
 
+	// NATS — optional, used for async audit event publishing.
+	// When empty, a NoopPublisher is used so audit failure never blocks operations.
+	NATSUrl string // e.g. nats://localhost:9053
+
 	// Observability
 	OTelEnabled      bool
 	OTelLogsEnabled  bool   // false for Jaeger; true only for backends that support OTLP logs
@@ -117,6 +121,7 @@ func Load() (*Config, error) {
 		FliptURL:         getEnv("FLIPT_URL", ""),
 		AuthSvcURL:       getEnv("AUTH_SVC_URL", "http://localhost:8080"),
 		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),
+		NATSUrl:          getEnv("NATS_URL", ""),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
 		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),
 		OTelEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),

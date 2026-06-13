@@ -1,4 +1,5 @@
-// Package config loads and validates auth-svc configuration from environment variables.
+// Package config loads and validates audit-svc configuration from environment
+// variables at startup. The returned Config is immutable after Load() returns.
 package config
 
 import (
@@ -10,22 +11,26 @@ import (
 	"time"
 )
 
-// Config holds all configuration for auth-svc.
+// Config holds all configuration for audit-svc.
 type Config struct {
+	// Service identity
 	ServiceName    string
 	ServiceVersion string
 	Environment    string
 
+	// HTTP server
 	HTTPPort        int
 	ReadTimeout     time.Duration
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+	HandlerTimeout  int
 
+	// Logging
 	LogLevel  string
 	LogFormat string
 
-	// Database — auth-svc owns its own DB (database-per-service pattern).
+	// PostgreSQL
 	DBHost     string
 	DBPort     int
 	DBName     string
@@ -36,26 +41,19 @@ type Config struct {
 	DBMinConns int
 	DBLogLevel string
 
-	// JWT — auth-svc holds the PRIVATE key for signing.
-	// Other services receive only the PUBLIC key.
-	JWTPrivateKeyB64 string // base64-encoded PKCS#8 PEM private key
+	// NATS JetStream
+	NATSUrl      string // e.g. nats://localhost:9053
+	NATSStream   string // stream name, default "AUDIT"
+	NATSConsumer string // durable consumer name
+
+	// JWT — audit-svc holds ONLY the public key (same as account-svc)
+	JWTPublicKeyB64  string
 	JWTIssuer        string
-	AccessTokenTTL   time.Duration // default 15m
-	RefreshTokenTTL  time.Duration // default 168h (7 days)
-	JWTSubjectKeyB64 string        // base64-encoded AES-256 key for encrypting Subject claim
-	BCryptCost       int           // bcrypt work factor (default 12)
+	JWTSubjectKeyB64 string
 
-	// Token store
-	TokenStore string // "postgres" | "redis" | "memory"
-
-	// Feature flags — optional, returns defaults if empty or unreachable
-	FliptURL      string
-	RedisAddr     string
-	RedisPassword string
-
-	// NATS — optional, used for async audit event publishing.
-	// When empty, a NoopPublisher is used so audit failure never blocks login.
-	NATSUrl string // e.g. nats://localhost:9053
+	// Rate limiting
+	RateLimitRPS   int
+	RateLimitBurst int
 
 	// Observability
 	OTelEnabled      bool
@@ -64,41 +62,40 @@ type Config struct {
 	OTelSamplingRate float64
 }
 
+// Load reads config from environment variables (and .env if present).
 func Load() (*Config, error) {
 	_ = loadDotEnv(".env")
 	environment := getEnv("ENVIRONMENT", "local")
 
 	cfg := &Config{
-		ServiceName:      getEnv("SERVICE_NAME", "auth-svc"),
+		ServiceName:      getEnv("SERVICE_NAME", "audit-svc"),
 		ServiceVersion:   getEnv("SERVICE_VERSION", "dev"),
 		Environment:      environment,
-		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
+		HTTPPort:         getEnvInt("HTTP_PORT", 8083),
 		ReadTimeout:      getEnvDuration("READ_TIMEOUT", 10*time.Second),
 		WriteTimeout:     getEnvDuration("WRITE_TIMEOUT", 30*time.Second),
 		IdleTimeout:      getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
 		ShutdownTimeout:  getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
+		HandlerTimeout:   getEnvInt("HANDLER_TIMEOUT_SECS", 25),
 		LogLevel:         getEnv("LOG_LEVEL", "info"),
 		LogFormat:        getEnv("LOG_FORMAT", "json"),
 		DBHost:           getEnv("DB_HOST", ""),
 		DBPort:           getEnvInt("DB_PORT", 5432),
-		DBName:           getEnv("DB_NAME", "authdb"),
+		DBName:           getEnv("DB_NAME", ""),
 		DBUser:           getEnv("DB_USER", ""),
 		DBPassword:       getEnv("DB_PASSWORD", ""),
 		DBSSLMode:        getEnv("DB_SSLMODE", "disable"),
-		DBMaxConns:       getEnvInt("DB_MAX_CONNS", 10),
-		DBMinConns:       getEnvInt("DB_MIN_CONNS", 2),
+		DBMaxConns:       getEnvInt("DB_MAX_CONNS", 25),
+		DBMinConns:       getEnvInt("DB_MIN_CONNS", 5),
 		DBLogLevel:       getEnv("DB_LOG_LEVEL", "silent"),
-		JWTPrivateKeyB64: getEnv("JWT_PRIVATE_KEY_B64", ""),
+		NATSUrl:          getEnv("NATS_URL", "nats://localhost:9053"),
+		NATSStream:       getEnv("NATS_STREAM", "AUDIT"),
+		NATSConsumer:     getEnv("NATS_CONSUMER", "audit-svc-consumer"),
+		JWTPublicKeyB64:  getEnv("JWT_PUBLIC_KEY_B64", ""),
 		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
-		AccessTokenTTL:   getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
 		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
-		BCryptCost:       getEnvInt("BCRYPT_COST", 12),
-		TokenStore:       getEnv("TOKEN_STORE", "postgres"),
-		FliptURL:         getEnv("FLIPT_URL", ""),
-		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
-		NATSUrl:          getEnv("NATS_URL", ""),
+		RateLimitRPS:     getEnvInt("RATE_LIMIT_RPS", 1000),
+		RateLimitBurst:   getEnvInt("RATE_LIMIT_BURST", 2000),
 		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
 		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),
 		OTelEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
@@ -108,10 +105,16 @@ func Load() (*Config, error) {
 	return cfg, cfg.validate()
 }
 
+// IsDevelopment returns true when running in the local environment.
+func (c *Config) IsDevelopment() bool { return c.Environment == "local" }
+
 func (c *Config) validate() error {
 	var errs []error
 	if c.DBHost == "" {
 		errs = append(errs, errors.New("DB_HOST is required"))
+	}
+	if c.DBName == "" {
+		errs = append(errs, errors.New("DB_NAME is required"))
 	}
 	if c.DBUser == "" {
 		errs = append(errs, errors.New("DB_USER is required"))
@@ -119,8 +122,8 @@ func (c *Config) validate() error {
 	if c.DBPassword == "" {
 		errs = append(errs, errors.New("DB_PASSWORD is required"))
 	}
-	if c.JWTPrivateKeyB64 == "" {
-		errs = append(errs, errors.New("JWT_PRIVATE_KEY_B64 is required"))
+	if c.JWTPublicKeyB64 == "" {
+		errs = append(errs, errors.New("JWT_PUBLIC_KEY_B64 is required"))
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("config validation failed: %w", errors.Join(errs...))
@@ -128,7 +131,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
-// ── env helpers ───────────────────────────────────────────────────────────────
+// ── env helpers (identical to account-svc/config — no shared dependency) ─────
 
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {

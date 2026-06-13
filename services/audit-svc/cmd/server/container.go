@@ -12,28 +12,25 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nats-io/nats.go"
-	"github.com/redis/go-redis/v9"
 
 	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/database"
-	"github.com/sanusi/banking/pkg/featureflag"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
-	svcconfig "github.com/sanusi/banking/services/account-svc/config"
-	"github.com/sanusi/banking/services/account-svc/internal/client/authclient"
-	"github.com/sanusi/banking/services/account-svc/internal/repository"
-	"github.com/sanusi/banking/services/account-svc/internal/services"
-	"github.com/sanusi/banking/services/account-svc/internal/transport"
+	svcconfig "github.com/sanusi/banking/services/audit-svc/config"
+	pgRepo "github.com/sanusi/banking/services/audit-svc/internal/repository/postgres"
+	"github.com/sanusi/banking/services/audit-svc/internal/services"
+	"github.com/sanusi/banking/services/audit-svc/internal/transport"
 )
 
 type container struct {
-	server *http.Server
-	otel   *observability.Provider
-	nc     *nats.Conn
+	server   *http.Server
+	otel     *observability.Provider
+	consumer *transport.Consumer
+	nc       *nats.Conn // NATS connection — closed on graceful shutdown
 }
 
-// build wires all dependencies for account-svc.
-// account-svc holds ONLY the RSA public key — it can verify JWTs but never issue them.
+// build wires all dependencies for audit-svc.
 func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	// ── OpenTelemetry ─────────────────────────────────────────────────────────
 	otelProvider, err := observability.Bootstrap(ctx, observability.Config{
@@ -48,11 +45,6 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap otel: %w", err)
 	}
-	slog.Info("otel bootstrap complete",
-		slog.Bool("enabled", cfg.OTelEnabled),
-		slog.String("endpoint", cfg.OTelEndpoint),
-		slog.Float64("sampling_rate", cfg.OTelSamplingRate),
-	)
 
 	// ── RSA public key (for JWT verification only) ─────────────────────────────
 	publicKey, err := parsePublicKey(cfg.JWTPublicKeyB64)
@@ -87,59 +79,62 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect database: %w", err)
 	}
 
-	// ── Redis (optional — API key read-through cache) ────────────────────────
-	// Same instance as auth-svc. Falls back gracefully to HTTP introspect if absent.
-	var redisClient *redis.Client
-	if cfg.RedisAddr != "" {
-		redisClient = redis.NewClient(&redis.Options{
-			Addr:     cfg.RedisAddr,
-			Password: cfg.RedisPassword,
-		})
-		if err := redisClient.Ping(ctx).Err(); err != nil {
-			slog.WarnContext(ctx, "redis ping failed — api key cache disabled, using HTTP introspect",
-				slog.String("addr", cfg.RedisAddr),
-				slog.String("error", err.Error()),
-			)
-			redisClient = nil
-		} else {
-			slog.Info("redis connected — api key cache enabled", slog.String("addr", cfg.RedisAddr))
-		}
+	// ── NATS JetStream ─────────────────────────────────────────────────────────
+	nc, err := nats.Connect(cfg.NATSUrl,
+		nats.Name("audit-svc"),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1), // reconnect indefinitely
+	)
+	if err != nil {
+		return nil, fmt.Errorf("connect nats: %w", err)
+	}
+	slog.Info("nats connected", slog.String("url", cfg.NATSUrl))
+
+	js, err := nc.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("get jetstream context: %w", err)
 	}
 
-	// ── Auth service client (for inter-service calls) ────────────────────────
-	authClient := authclient.New(cfg.AuthSvcURL)
+	// Ensure the AUDIT stream exists (idempotent — publishers also call this).
+	if err := pkgaudit.EnsureStream(js); err != nil {
+		return nil, fmt.Errorf("ensure audit stream: %w", err)
+	}
 
-	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
-	featureflag.Init(cfg.FliptURL, "default")
-
-	// ── Audit publisher (NATS, with NoopPublisher fallback) ──────────────────
-	auditPublisher, nc := buildAuditPublisher(ctx, cfg.NATSUrl)
-
-	// ── Repositories & services ───────────────────────────────────────────────
-	accountRepo := repository.NewAccountRepository(db)
+	// ── Wiring ────────────────────────────────────────────────────────────────
+	repo := pgRepo.New(db)
+	auditSvc := services.New(repo)
 	validate := validator.New()
-	accountSvc := services.NewAccountService(accountRepo)
-	accountHandler := transport.NewAccountHandler(accountSvc, validate, authClient, auditPublisher)
+	auditHandler := transport.NewAuditHandler(auditSvc, validate)
+
+	// ── NATS consumer (started in main after build) ────────────────────────────
+	consumer, err := transport.NewConsumer(js, cfg.NATSConsumer, auditSvc)
+	if err != nil {
+		return nil, fmt.Errorf("create nats consumer: %w", err)
+	}
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()
 	health.Register("postgres", func(hctx context.Context) error {
 		return database.HealthCheck(hctx, db)
 	})
+	health.Register("nats", func(_ context.Context) error {
+		if !nc.IsConnected() {
+			return fmt.Errorf("nats disconnected")
+		}
+		return nil
+	})
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	router := transport.NewRouter(transport.RouterConfig{
-		AccountHandler: accountHandler,
-		Health:         health,
+		AuditHandler: auditHandler,
+		Health:       health,
 		JWTConfig: pkgmiddleware.JWTConfig{
 			PublicKey:  publicKey,
 			Issuer:     cfg.JWTIssuer,
 			SubjectKey: subjectKey,
 		},
-		APIKeyConfig: pkgmiddleware.APIKeyConfig{
-			Lookup:      authclient.NewAPIKeyLookup(authClient, redisClient),
-			Environment: cfg.Environment,
-		},
+		// audit-svc accepts API key auth too (no Redis — pass empty config)
+		APIKeyConfig:   pkgmiddleware.APIKeyConfig{},
 		RateLimitRPS:   cfg.RateLimitRPS,
 		RateLimitBurst: cfg.RateLimitBurst,
 		RequestTimeout: cfg.HandlerTimeout,
@@ -155,42 +150,16 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
-	return &container{server: server, otel: otelProvider, nc: nc}, nil
+	return &container{
+		server:   server,
+		otel:     otelProvider,
+		consumer: consumer,
+		nc:       nc,
+	}, nil
 }
 
-// buildAuditPublisher connects to NATS and returns a NATSPublisher.
-// Falls back to NoopPublisher so audit failures never block account operations.
-func buildAuditPublisher(ctx context.Context, natsURL string) (pkgaudit.Publisher, *nats.Conn) {
-	if natsURL == "" {
-		slog.InfoContext(ctx, "audit publisher: NATS_URL not set, using noop publisher")
-		return &pkgaudit.NoopPublisher{}, nil
-	}
-	nc, err := nats.Connect(natsURL,
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.Name("account-svc"),
-	)
-	if err != nil {
-		slog.WarnContext(ctx, "audit publisher: failed to connect to NATS, using noop publisher",
-			slog.String("nats_url", natsURL),
-			slog.String("error", err.Error()),
-		)
-		return &pkgaudit.NoopPublisher{}, nil
-	}
-	pub, err := pkgaudit.NewNATSPublisher(nc)
-	if err != nil {
-		slog.WarnContext(ctx, "audit publisher: failed to create NATS publisher, using noop publisher",
-			slog.String("error", err.Error()),
-		)
-		_ = nc.Drain()
-		return &pkgaudit.NoopPublisher{}, nil
-	}
-	slog.InfoContext(ctx, "audit publisher: NATS connected", slog.String("nats_url", natsURL))
-	return pub, nc
-}
+// ── key helpers (same as account-svc) ────────────────────────────────────────
 
-// decodeBase64Key decodes a standard base64-encoded AES key from an env var.
-// Returns nil (no error) when the value is empty — callers treat nil as "no encryption".
 func decodeBase64Key(b64 string) ([]byte, error) {
 	if b64 == "" {
 		return nil, nil
@@ -205,27 +174,22 @@ func decodeBase64Key(b64 string) ([]byte, error) {
 	return key, nil
 }
 
-// parsePublicKey decodes a base64-encoded PKIX PEM public key.
 func parsePublicKey(b64 string) (*rsa.PublicKey, error) {
 	pemBytes, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		return nil, fmt.Errorf("base64 decode: %w", err)
 	}
-
 	block, _ := pem.Decode(pemBytes)
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found in public key")
 	}
-
 	keyInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("parse PKIX public key: %w", err)
 	}
-
 	rsaKey, ok := keyInterface.(*rsa.PublicKey)
 	if !ok {
 		return nil, fmt.Errorf("key is not an RSA public key (got %T)", keyInterface)
 	}
-
 	return rsaKey, nil
 }

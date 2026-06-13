@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
+	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/httpx"
 	"github.com/sanusi/banking/pkg/middleware"
@@ -27,14 +28,16 @@ type AccountHandler struct {
 	tr       *observability.ServiceTracer
 	svc      services.AccountService
 	validate *validator.Validate
+	audit    pkgaudit.Publisher
 }
 
-func NewAccountHandler(svc services.AccountService, validate *validator.Validate, authClient *authclient.Client) *AccountHandler {
+func NewAccountHandler(svc services.AccountService, validate *validator.Validate, authClient *authclient.Client, audit pkgaudit.Publisher) *AccountHandler {
 	return &AccountHandler{
 		tr:         observability.NewServiceTracer("AccountHandler"),
 		svc:        svc,
 		validate:   validate,
 		authClient: authClient,
+		audit:      audit,
 	}
 }
 
@@ -66,6 +69,23 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		writeAccountError(w, r, err)
 		return
 	}
+
+	callerID := middleware.UserIDFromContext(ctx)
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAccountCreated,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "account",
+			ResourceID:  resp.ID,
+			ServiceName: "account-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			TraceID:     span.SpanContext().TraceID().String(),
+		})
+	}()
+
 	httpx.WriteCreated(w, r, resp)
 }
 
@@ -109,12 +129,30 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "GetBalance")
 	defer span.End()
 
-	resp, err := h.svc.GetBalance(ctx, chi.URLParam(r, "id"))
+	accountID := chi.URLParam(r, "id")
+	resp, err := h.svc.GetBalance(ctx, accountID)
 	if err != nil {
 		observability.RecordError(ctx, err)
 		writeAccountError(w, r, err)
 		return
 	}
+
+	callerID := middleware.UserIDFromContext(ctx)
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAccountBalanceRead,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "account",
+			ResourceID:  accountID,
+			ServiceName: "account-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			TraceID:     span.SpanContext().TraceID().String(),
+		})
+	}()
+
 	httpx.WriteSuccess(w, r, resp)
 }
 
@@ -141,12 +179,31 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteValidationError(w, r, err)
 		return
 	}
-	resp, err := h.svc.Credit(ctx, chi.URLParam(r, "id"), &req)
+	accountID := chi.URLParam(r, "id")
+	resp, err := h.svc.Credit(ctx, accountID, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
 		writeAccountError(w, r, err)
 		return
 	}
+
+	callerID := middleware.UserIDFromContext(ctx)
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAccountCredit,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "account",
+			ResourceID:  accountID,
+			ServiceName: "account-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			TraceID:     span.SpanContext().TraceID().String(),
+			Metadata:    map[string]any{"amount": req.Amount},
+		})
+	}()
+
 	httpx.WriteSuccess(w, r, resp)
 }
 
@@ -173,12 +230,31 @@ func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteValidationError(w, r, err)
 		return
 	}
-	resp, err := h.svc.Debit(ctx, chi.URLParam(r, "id"), &req)
+	accountID := chi.URLParam(r, "id")
+	resp, err := h.svc.Debit(ctx, accountID, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
 		writeAccountError(w, r, err)
 		return
 	}
+
+	callerID := middleware.UserIDFromContext(ctx)
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAccountDebit,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "account",
+			ResourceID:  accountID,
+			ServiceName: "account-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			TraceID:     span.SpanContext().TraceID().String(),
+			Metadata:    map[string]any{"amount": req.Amount},
+		})
+	}()
+
 	httpx.WriteSuccess(w, r, resp)
 }
 

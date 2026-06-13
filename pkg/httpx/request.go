@@ -70,6 +70,11 @@ func QueryParamInt64(r *http.Request, key string, defaultValue int64) int64 {
 	return n
 }
 
+// QueryInt extracts an integer query parameter, returning defaultVal if absent or invalid.
+func QueryInt(r *http.Request, key string, defaultVal int) int {
+	return QueryParamInt(r, key, defaultVal)
+}
+
 // PaginationParams extracts and validates pagination query params.
 // Returns page (1-based) and pageSize, clamping pageSize to [1, maxPageSize].
 func PaginationParams(r *http.Request, maxPageSize int) (page int, pageSize int) {

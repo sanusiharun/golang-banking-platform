@@ -106,6 +106,9 @@ func run() error {
 		if err := c.otel.Shutdown(shutCtx); err != nil {
 			slog.Error("otel shutdown", slog.String("error", err.Error()))
 		}
+		if c.nc != nil {
+			_ = c.nc.Drain() // flush pending audit publishes before exit
+		}
 	}()
 
 	// ── 4. Start HTTP server ──────────────────────────────────────────────────

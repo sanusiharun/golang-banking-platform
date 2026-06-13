@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
+	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/database"
 	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/idempotency"
@@ -33,6 +35,7 @@ type container struct {
 	server           *http.Server
 	otel             *observability.Provider
 	idempotencyStore *idempotencyCleanupStore // nil when Postgres store is unavailable
+	nc               *nats.Conn              // nil when NATS is not configured
 }
 
 func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
@@ -110,8 +113,14 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	apiKeySvc := services.NewAPIKeyService(saStore, apiKeyStore, cfg.Environment)
 
 	featureflag.Init(cfg.FliptURL, "default")
-	authHandler := transport.NewAuthHandler(authSvc, validate)
-	apiKeyHandler := transport.NewAPIKeyHandler(apiKeySvc, validate)
+
+	// ── Audit publisher ────────────────────────────────────────────────────────
+	// Prefer NATS async publishing; fall back to Noop when NATS is unconfigured.
+	// Audit failure must never block a user-facing operation.
+	auditPublisher, nc := buildAuditPublisher(cfg.NATSUrl)
+
+	authHandler := transport.NewAuthHandler(authSvc, validate, auditPublisher)
+	apiKeyHandler := transport.NewAPIKeyHandler(apiKeySvc, validate, auditPublisher)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()
@@ -159,7 +168,42 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		server:           server,
 		otel:             otelProvider,
 		idempotencyStore: pgIdempStore, // cleanup goroutine always uses postgres directly
+		nc:               nc,
 	}, nil
+}
+
+// buildAuditPublisher creates a NATSPublisher when natsURL is set, falling back
+// to NoopPublisher. Returns (publisher, *nats.Conn) — nc is nil for Noop.
+func buildAuditPublisher(natsURL string) (pkgaudit.Publisher, *nats.Conn) {
+	if natsURL == "" {
+		slog.Info("audit publisher: nats url not configured, using noop")
+		return pkgaudit.NoopPublisher{}, nil
+	}
+
+	nc, err := nats.Connect(natsURL,
+		nats.Name("auth-svc-audit"),
+		nats.RetryOnFailedConnect(true),
+		nats.MaxReconnects(-1),
+	)
+	if err != nil {
+		slog.Warn("audit publisher: nats connect failed, falling back to noop",
+			slog.String("url", natsURL),
+			slog.String("error", err.Error()),
+		)
+		return pkgaudit.NoopPublisher{}, nil
+	}
+
+	pub, err := pkgaudit.NewNATSPublisher(nc)
+	if err != nil {
+		slog.Warn("audit publisher: failed to create nats publisher, falling back to noop",
+			slog.String("error", err.Error()),
+		)
+		nc.Close()
+		return pkgaudit.NoopPublisher{}, nil
+	}
+
+	slog.Info("audit publisher: nats connected", slog.String("url", natsURL))
+	return pub, nc
 }
 
 // buildAPIKeyStore wires the API key and service account stores.

@@ -1,10 +1,11 @@
-// Command server is the entrypoint for auth-svc.
+// Command server is the entrypoint for audit-svc.
 // Responsibilities:
 //  1. Load config (fail fast on missing required vars)
-//  2. Configure the global slog logger
-//  3. Build the dependency container
-//  4. Start the HTTP server
-//  5. Graceful shutdown on SIGTERM / SIGINT
+//  2. Configure global slog logger
+//  3. Build the dependency container (DB, NATS, HTTP server)
+//  4. Start the NATS JetStream consumer in a goroutine
+//  5. Start the HTTP server
+//  6. Graceful shutdown on SIGTERM / SIGINT
 package main
 
 import (
@@ -20,7 +21,7 @@ import (
 
 	"github.com/sanusi/banking/pkg/logger"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
-	svcconfig "github.com/sanusi/banking/services/auth-svc/config"
+	svcconfig "github.com/sanusi/banking/services/audit-svc/config"
 )
 
 func main() {
@@ -62,10 +63,12 @@ func run() error {
 		},
 	})
 
-	slog.Info("starting auth-svc")
+	slog.Info("starting audit-svc")
 
 	// ── 3. Wire dependencies ──────────────────────────────────────────────────
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	c, err := build(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("build container: %w", err)
@@ -76,20 +79,18 @@ func run() error {
 	}
 
 	defer func() {
-		shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+		shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutCancel()
 		if err := c.otel.Shutdown(shutCtx); err != nil {
 			slog.Error("otel shutdown", slog.String("error", err.Error()))
 		}
-		if c.nc != nil {
-			_ = c.nc.Drain() // flush pending audit publishes before exit
-		}
+		c.nc.Drain() //nolint:errcheck — best-effort drain on shutdown
 	}()
 
-	// ── 4. Start background jobs ──────────────────────────────────────────────
-	if c.idempotencyStore != nil {
-		go runIdempotencyCleanup(ctx, c.idempotencyStore, cfg.ShutdownTimeout)
-	}
+	// ── 4. Start NATS consumer ────────────────────────────────────────────────
+	go func() {
+		c.consumer.Start(ctx)
+	}()
 
 	// ── 5. Start HTTP server ──────────────────────────────────────────────────
 	serverErrors := make(chan error, 1)
@@ -112,41 +113,15 @@ func run() error {
 	}
 
 	// ── 7. Graceful shutdown ──────────────────────────────────────────────────
-	shutCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-	defer cancel()
+	cancel() // stops the consumer goroutine
+
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+	defer shutCancel()
 
 	if err := c.server.Shutdown(shutCtx); err != nil {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 
-	slog.Info("auth-svc stopped cleanly")
+	slog.Info("audit-svc stopped cleanly")
 	return nil
-}
-
-// runIdempotencyCleanup deletes expired idempotency records every hour.
-// Runs until ctx is cancelled (i.e. on graceful shutdown).
-func runIdempotencyCleanup(ctx context.Context, store *idempotencyCleanupStore, _ time.Duration) {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	slog.Info("idempotency cleanup goroutine started")
-
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("idempotency cleanup goroutine stopped")
-			return
-		case <-ticker.C:
-			deleted, err := store.DeleteExpired(ctx)
-			if err != nil {
-				slog.Error("idempotency cleanup: failed to delete expired records",
-					slog.String("error", err.Error()),
-				)
-			} else if deleted > 0 {
-				slog.Info("idempotency cleanup: deleted expired records",
-					slog.Int64("count", deleted),
-				)
-			}
-		}
-	}
 }

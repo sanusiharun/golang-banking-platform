@@ -236,6 +236,7 @@ func (s *authService) issueTokenPair(ctx context.Context, user *dao.User) (*dto.
 	}
 
 	return &dto.LoginResponse{
+		UserID:                user.ID,
 		AccessToken:           signed,
 		RefreshToken:          rawRefresh,
 		AccessTokenExpiresAt:  accessExpiresAt.Format(time.RFC3339),

@@ -1,11 +1,13 @@
 package transport
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
 
+	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/httpx"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dto"
@@ -17,10 +19,11 @@ import (
 type APIKeyHandler struct {
 	svc      services.APIKeyService
 	validate *validator.Validate
+	audit    pkgaudit.Publisher
 }
 
-func NewAPIKeyHandler(svc services.APIKeyService, validate *validator.Validate) *APIKeyHandler {
-	return &APIKeyHandler{svc: svc, validate: validate}
+func NewAPIKeyHandler(svc services.APIKeyService, validate *validator.Validate, audit pkgaudit.Publisher) *APIKeyHandler {
+	return &APIKeyHandler{svc: svc, validate: validate, audit: audit}
 }
 
 // ── Service Account endpoints ─────────────────────────────────────────────────
@@ -43,6 +46,21 @@ func (h *APIKeyHandler) CreateServiceAccount(w http.ResponseWriter, r *http.Requ
 		httpx.WriteError(w, r, err)
 		return
 	}
+
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAdminSvcAccCreated,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "service_account",
+			ResourceID:  sa.ID,
+			ServiceName: "auth-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+		})
+	}()
+
 	httpx.WriteCreated(w, r, sa)
 }
 
@@ -112,6 +130,22 @@ func (h *APIKeyHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAPIKeyCreated,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "api_key",
+			ResourceID:  resp.KeyID,
+			ServiceName: "auth-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			Metadata:    map[string]any{"service_account_id": serviceAccountID},
+		})
+	}()
+
 	// 201 Created — raw key is in the body, visible only this once.
 	httpx.WriteCreated(w, r, resp)
 }
@@ -136,6 +170,23 @@ func (h *APIKeyHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, r, err)
 		return
 	}
+
+	callerID := pkgmiddleware.UserIDFromContext(r.Context())
+	go func() {
+		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
+			ActorType:   pkgaudit.ActorTypeUser,
+			ActorID:     callerID,
+			Action:      pkgaudit.ActionAPIKeyRevoked,
+			Status:      pkgaudit.StatusSuccess,
+			Resource:    "api_key",
+			ResourceID:  keyID,
+			ServiceName: "auth-svc",
+			IPAddress:   r.RemoteAddr,
+			UserAgent:   r.UserAgent(),
+			Metadata:    map[string]any{"service_account_id": serviceAccountID},
+		})
+	}()
+
 	httpx.WriteNoContent(w)
 }
 

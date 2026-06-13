@@ -10,6 +10,7 @@ type LoginRequest struct {
 // LoginResponse is returned on successful login or token refresh.
 // Both access and refresh tokens are issued together.
 type LoginResponse struct {
+	UserID                string `json:"user_id"` // included so callers (audit, tests) have the actor ID
 	AccessToken           string `json:"access_token"`
 	RefreshToken          string `json:"refresh_token"`
 	AccessTokenExpiresAt  string `json:"access_token_expires_at"`
