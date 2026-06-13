@@ -54,3 +54,15 @@ prometheus-data/
 datasource/.env
 monitoring/.env
 platform/.env
+
+# Credentials / secrets file (keep locally, never commit)
+CREDENTIALS.txt
+
+# Agent skills lockfile (machine-specific)
+skills-lock.json
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
+
+# Agents directory (tooling state, not source)
+.agents/
