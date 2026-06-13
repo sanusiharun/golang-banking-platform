@@ -141,12 +141,12 @@ environment:
 - Feature flags: `show_account_metadata`, `banking_operation_hours`
 - Async audit publishing via NATS → NoopPublisher fallback
 
-### audit-svc (scaffolded — not running yet)
+### audit-svc (port 8083 — wired, not yet DB-migrated)
 - NATS consumer → `banking_audits` Postgres DB
 - HTTP query API for audit events
-- Migration: `services/audit-svc/migrations/001_create_audit_events.up.sql`
-- DB bootstrap: `datasource/postgres/04_setup_banking_audits.sql`
-- **Not yet** wired into `docker-compose.yml` or `prometheus.yml`
+- Wired into `docker-compose.yml` and `prometheus.yml`
+- Dockerfile uses `alpine:3.20` (same as other services — distroless has no wget for healthcheck)
+- Migration still needs to run: `datasource/postgres/04_setup_banking_audits.sql` + `001_create_audit_events.up.sql`
 
 ### pkg/
 - `pkg/audit` — `Publisher` interface, `NATSPublisher`, `NoopPublisher`, `HTTPPublisher`
@@ -164,8 +164,6 @@ environment:
 
 ## Pending (priority order)
 
-- [ ] **Fix go.work** — `services/audit-svc` → `./services/audit-svc` (missing `./`)
-- [ ] **Wire audit-svc** — add to `docker-compose.yml` (port 8083, `NATS_URL: nats://platform-nats:4222`) and `prometheus.yml`
 - [ ] **Run audit DB migration** — `04_setup_banking_audits.sql` + `001_create_audit_events.up.sql`
 - [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist (currently relies on Docker network isolation only)
 - [ ] **Logout ActorID** — logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`

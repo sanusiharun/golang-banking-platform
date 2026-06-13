@@ -4,5 +4,5 @@ use (
 	./pkg
 	./services/account-svc
 	./services/auth-svc
-	services/audit-svc
+	./services/audit-svc
 )

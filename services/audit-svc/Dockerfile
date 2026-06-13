@@ -35,13 +35,11 @@ RUN cd services/audit-svc && \
 # ──────────────────────────────────────────────────────────────────────────────
 # Stage 2: Runtime
 # ──────────────────────────────────────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:3.20
 
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+RUN apk add --no-cache ca-certificates tzdata wget
+
 COPY --from=builder /bin/audit-svc /audit-svc
-
-USER nonroot:nonroot
 
 EXPOSE 8083
 
