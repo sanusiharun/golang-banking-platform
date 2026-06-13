@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-09
+> Last updated: 2026-06-13
 > Pick up from here in a fresh conversation.
 
 ---
@@ -108,6 +108,24 @@ environment:
 - `services/account-svc/internal/transport/errors.go` — account-specific sentinel error mapper
 - `services/*/internal/transport/response.go` — kept as empty stubs with comment
 
+**pkg/audit — async audit trail (DONE)**
+- `pkg/audit/publisher.go` — `Publisher` interface + `AuditEvent` struct
+- `pkg/audit/nats.go` — `NATSPublisher`: publishes events to `audit.events` NATS subject
+- `pkg/audit/noop.go` — `NoopPublisher`: silent no-op fallback when NATS is unavailable
+- `pkg/audit/http.go` — `HTTPPublisher`: direct HTTP fallback (unused in prod, available for testing)
+- Both `auth-svc` and `account-svc` wire `NATS_URL` env var → NATSPublisher or NoopPublisher fallback
+- Audit failure **never blocks** user-facing operations (fire-and-forget goroutines)
+- `nc.Drain()` called on graceful shutdown to flush pending publishes
+
+**audit-svc (SCAFFOLDED — not yet running)**
+- `services/audit-svc/` — new microservice, port TBD (8083 next available)
+- NATS consumer subscribes to `audit.events`, persists to `banking_audits` Postgres DB
+- HTTP query API for querying audit events
+- Migration: `services/audit-svc/migrations/001_create_audit_events.up.sql`
+- DB bootstrap: `datasource/postgres/04_setup_banking_audits.sql`
+- Not yet wired into `docker-compose.yml` or `prometheus.yml` — next step
+- `go.work` references `services/audit-svc` (fix: missing `./` prefix — should be `./services/audit-svc`)
+
 **Observability**
 - Prometheus scraping auth-svc at `host.docker.internal:8082`, account-svc at `host.docker.internal:8081`
 - Grafana provisioned with Prometheus, Alertmanager, Loki, Jaeger datasources
@@ -171,11 +189,15 @@ curl -X POST http://localhost:8082/auth/login \
 Install from https://git-scm.com — choose **"Git from the command line and 3rd-party software"** so `bash.exe` lands in PATH. Then all Makefile targets work from PowerShell.
 
 ### 3. Pending features (priority order)
+- [ ] **Fix go.work** — change `services/audit-svc` → `./services/audit-svc` (missing `./` prefix)
+- [ ] **Wire audit-svc into docker-compose.yml** — add service block, port 8083, `NATS_URL: nats://platform-nats:4222`
+- [ ] **Run audit DB migration** — `datasource/postgres/04_setup_banking_audits.sql` + `001_create_audit_events.up.sql`
+- [ ] **Add audit-svc to prometheus.yml** scrape targets at `host.docker.internal:8083`
+- [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist middleware (currently relies on Docker network isolation only)
+- [ ] **Logout ActorID** — currently logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`
 - [ ] **API key cache warm-up** — on auth-svc startup, pre-populate `apikey:{hash}` in Redis for all active keys from PostgreSQL; avoids cold-start under load when both services restart simultaneously
-- [ ] **Kubernetes migration** — was discussed but not started; services are Docker-only right now
-- [ ] **payment-svc** — next microservice; port 8083, same Dockerfile pattern as auth-svc/account-svc
-- [ ] **notification-svc** — consumes NATS events from account-svc; port 8084
-- [ ] **Rate limiting middleware** — `pkg/middleware` has the interface, wire it into routers
+- [ ] **payment-svc** — next microservice; port 8084 (8083 reserved for audit-svc)
+- [ ] **notification-svc** — consumes NATS events from account-svc
 - [ ] **Integration tests** — `services/*/tests/integration/` scaffold exists, no tests written yet
 - [ ] **k6 performance tests** — `performance-test-k6/` scripts exist, run with `make k6-smoke`
 
