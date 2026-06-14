@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nats-io/nats.go"
@@ -113,8 +112,11 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
 	featureflag.Init(cfg.FliptURL, "default")
 
-	// ── Audit publisher (NATS, with NoopPublisher fallback) ──────────────────
-	auditPublisher, nc := buildAuditPublisher(ctx, cfg.NATSUrl)
+	// ── Audit publisher ────────────────────────────────────────────────────────
+	auditPublisher, nc := pkgaudit.NewPublisher(ctx, pkgaudit.PublisherConfig{
+		NATSURL:     cfg.NATSUrl,
+		ServiceName: "account-svc",
+	})
 
 	// ── Repositories & services ───────────────────────────────────────────────
 	accountRepo := repository.NewAccountRepository(db)
@@ -157,64 +159,6 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	return &container{server: server, otel: otelProvider, nc: nc}, nil
-}
-
-// buildAuditPublisher connects to NATS and returns a NATSPublisher wrapped with Async.
-// Falls back to NoopPublisher so audit failures never block account operations.
-// nats.RetryOnFailedConnect returns immediately before the TCP handshake completes,
-// so we wait up to 5s for IsConnected before attempting JetStream operations.
-func buildAuditPublisher(ctx context.Context, natsURL string) (pkgaudit.Publisher, *nats.Conn) {
-	if natsURL == "" {
-		slog.InfoContext(ctx, "audit publisher: NATS_URL not set, using noop publisher")
-		return pkgaudit.NoopPublisher{}, nil
-	}
-	nc, err := nats.Connect(natsURL,
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-		nats.Name("account-svc"),
-	)
-	if err != nil {
-		slog.WarnContext(ctx, "audit publisher: NATS connect failed, using noop publisher",
-			slog.String("nats_url", natsURL),
-			slog.String("error", err.Error()),
-		)
-		return pkgaudit.NoopPublisher{}, nil
-	}
-	if err := waitForNATSConn(ctx, nc, 5*time.Second); err != nil {
-		slog.WarnContext(ctx, "audit publisher: NATS not ready, using noop publisher",
-			slog.String("nats_url", natsURL),
-			slog.String("error", err.Error()),
-		)
-		nc.Close()
-		return pkgaudit.NoopPublisher{}, nil
-	}
-	pub, err := pkgaudit.NewNATSPublisher(nc)
-	if err != nil {
-		slog.WarnContext(ctx, "audit publisher: failed to create NATS publisher, using noop publisher",
-			slog.String("error", err.Error()),
-		)
-		_ = nc.Drain()
-		return pkgaudit.NoopPublisher{}, nil
-	}
-	slog.InfoContext(ctx, "audit publisher: NATS connected", slog.String("nats_url", natsURL))
-	return pkgaudit.Async(pub), nc
-}
-
-// waitForNATSConn blocks until nc.IsConnected() or the deadline is reached.
-// Required because nats.RetryOnFailedConnect returns before the TCP handshake completes.
-func waitForNATSConn(ctx context.Context, nc *nats.Conn, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for !nc.IsConnected() {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for NATS connection after %s", timeout)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(100 * time.Millisecond):
-		}
-	}
-	return nil
 }
 
 // decodeBase64Key decodes a standard base64-encoded AES key from an env var.

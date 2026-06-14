@@ -115,9 +115,10 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	featureflag.Init(cfg.FliptURL, "default")
 
 	// ── Audit publisher ────────────────────────────────────────────────────────
-	// Prefer NATS async publishing; fall back to Noop when NATS is unconfigured.
-	// Audit failure must never block a user-facing operation.
-	auditPublisher, nc := buildAuditPublisher(cfg.NATSUrl)
+	auditPublisher, nc := pkgaudit.NewPublisher(ctx, pkgaudit.PublisherConfig{
+		NATSURL:     cfg.NATSUrl,
+		ServiceName: "auth-svc",
+	})
 
 	authHandler := transport.NewAuthHandler(authSvc, validate, auditPublisher)
 	apiKeyHandler := transport.NewAPIKeyHandler(apiKeySvc, validate, auditPublisher)
@@ -170,64 +171,6 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		idempotencyStore: pgIdempStore, // cleanup goroutine always uses postgres directly
 		nc:               nc,
 	}, nil
-}
-
-// buildAuditPublisher creates a NATSPublisher when natsURL is set, falling back
-// to NoopPublisher. Returns (publisher, *nats.Conn) — nc is nil for Noop.
-// nats.RetryOnFailedConnect returns immediately before the TCP handshake completes,
-// so we wait up to 5s for IsConnected before attempting JetStream operations.
-func buildAuditPublisher(natsURL string) (pkgaudit.Publisher, *nats.Conn) {
-	if natsURL == "" {
-		slog.Info("audit publisher: NATS_URL not set, using noop")
-		return pkgaudit.NoopPublisher{}, nil
-	}
-
-	nc, err := nats.Connect(natsURL,
-		nats.Name("auth-svc-audit"),
-		nats.RetryOnFailedConnect(true),
-		nats.MaxReconnects(-1),
-	)
-	if err != nil {
-		slog.Warn("audit publisher: NATS connect failed, using noop",
-			slog.String("url", natsURL),
-			slog.String("error", err.Error()),
-		)
-		return pkgaudit.NoopPublisher{}, nil
-	}
-
-	if err := waitForNATSConn(nc, 5*time.Second); err != nil {
-		slog.Warn("audit publisher: NATS not ready, using noop",
-			slog.String("url", natsURL),
-			slog.String("error", err.Error()),
-		)
-		nc.Close()
-		return pkgaudit.NoopPublisher{}, nil
-	}
-
-	pub, err := pkgaudit.NewNATSPublisher(nc)
-	if err != nil {
-		slog.Warn("audit publisher: failed to create NATS publisher, using noop",
-			slog.String("error", err.Error()),
-		)
-		nc.Close()
-		return pkgaudit.NoopPublisher{}, nil
-	}
-
-	slog.Info("audit publisher: NATS connected", slog.String("url", natsURL))
-	return pkgaudit.Async(pub), nc
-}
-
-// waitForNATSConn blocks until nc.IsConnected() or the timeout is reached.
-// Required because nats.RetryOnFailedConnect returns before the TCP handshake completes.
-func waitForNATSConn(nc *nats.Conn, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for !nc.IsConnected() {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timed out waiting for NATS connection after %s", timeout)
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return nil
 }
 
 // buildAPIKeyStore wires the API key and service account stores.
