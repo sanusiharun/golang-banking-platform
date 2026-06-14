@@ -81,12 +81,16 @@ groups:
             sum(rate(account_svc_http_requests_total{status=~"5.."}[5m]))
             +
             sum(rate(auth_svc_http_requests_total{status=~"5.."}[5m]))
+            +
+            sum(rate(audit_svc_http_requests_total{status=~"5.."}[5m]))
           )
           /
           (
             sum(rate(account_svc_http_requests_total[5m]))
             +
             sum(rate(auth_svc_http_requests_total[5m]))
+            +
+            sum(rate(audit_svc_http_requests_total[5m]))
           ) > 0.02
         for: 2m
         labels:

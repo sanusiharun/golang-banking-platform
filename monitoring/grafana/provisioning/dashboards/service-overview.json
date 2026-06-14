@@ -1,7 +1,7 @@
 {
   "title": "Service Overview",
   "uid": "service-overview",
-  "description": "Deep-dive into a single microservice. Switch services via the $service variable. All panels are fully reusable across account-svc, auth-svc, payment-svc, etc.",
+  "description": "Deep-dive into a single microservice. Switch services via the $service variable. All panels are fully reusable across account-svc, auth-svc, audit-svc, etc.",
   "schemaVersion": 38,
   "version": 1,
   "refresh": "30s",
@@ -1861,7 +1861,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{job=\"$service\"} | json",
+          "expr": "{job=\"$service\"} | json | path !~ `/metrics|/healthz.*`",
           "legendFormat": "",
           "refId": "A"
         }

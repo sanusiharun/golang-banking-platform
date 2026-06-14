@@ -8,20 +8,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// skipLogPaths contains paths that are polled frequently and would flood logs
-// with noise. Prometheus scrapes /metrics every 10s; health checks hit /healthz.
-var skipLogPaths = map[string]struct{}{
-	"/metrics": {},
-	"/healthz": {},
-	"/readyz":  {},
-	"/livez":   {},
-}
-
 // RequestLogger logs each incoming request using the global slog default logger.
 //
 // Design notes:
-//   - /metrics, /healthz, /readyz, /livez are silently skipped — they are
-//     scraped every few seconds and would drown out real application traffic.
+//   - /metrics and /healthz/* are silently skipped — they are polled every few
+//     seconds by Prometheus and load balancers and would drown out real traffic.
 //   - request_id is NOT added here — contextExtractorHandler injects it automatically
 //     from context on every slog call, adding it here would produce duplicates.
 //   - trace_id / span_id are captured explicitly using trace.SpanFromContext BEFORE
@@ -30,8 +21,9 @@ var skipLogPaths = map[string]struct{}{
 //     SpanContext().IsValid() still returns the final IDs, so we always get them.
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip noisy infrastructure endpoints entirely.
-		if _, skip := skipLogPaths[r.URL.Path]; skip {
+		// Skip infrastructure endpoints — not application traffic.
+		p := r.URL.Path
+		if p == "/metrics" || (len(p) >= 8 && p[:8] == "/healthz") {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -88,6 +88,13 @@ scrape_configs:
           source: local
           __path__: /var/log/banking/auth-svc.log
 
+      - targets: [ localhost ]
+        labels:
+          job: audit-svc
+          source: local
+          __path__: /var/log/banking/audit-svc.log
+
+
     pipeline_stages:
       # Drop non-JSON lines (e.g. compiler output from go run: "ld: warning", "# github.com/...")
       - drop:

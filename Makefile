@@ -26,11 +26,11 @@ else
 endif
 .SHELLFLAGS := -c
 
-.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress help
+.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account migrate-audit tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
-SERVICES    := services/auth-svc services/account-svc
+SERVICES    := services/auth-svc services/account-svc services/audit-svc
 PROTO_DIR   := proto
 
 # ─── Default ──────────────────────────────────────────────────────────────────
@@ -175,6 +175,12 @@ ACCOUNT_DB_NAME     ?= banking_accounts
 ACCOUNT_DB_USER     ?= account_svc
 ACCOUNT_DB_PASSWORD ?= account_svc_pass_local
 
+AUDIT_DB_HOST     ?= localhost
+AUDIT_DB_PORT     ?= 5432
+AUDIT_DB_NAME     ?= banking_audits
+AUDIT_DB_USER     ?= audit_svc
+AUDIT_DB_PASSWORD ?= audit_svc_pass_local
+
 migrate-auth: ## Run auth-svc SQL migrations against banking_auth
 	@echo "→ Migrating auth-svc → $(AUTH_DB_HOST):$(AUTH_DB_PORT)/$(AUTH_DB_NAME)"
 	@for f in $$(ls services/auth-svc/migrations/*.sql 2>/dev/null | sort); do \
@@ -197,7 +203,18 @@ migrate-account: ## Run account-svc SQL migrations against banking_accounts
 	done
 	@echo "✓ account-svc migrations complete"
 
-migrate: migrate-auth migrate-account ## Run ALL migrations (auth + account)
+migrate-audit: ## Run audit-svc SQL migrations against banking_audits
+	@echo "→ Migrating audit-svc → $(AUDIT_DB_HOST):$(AUDIT_DB_PORT)/$(AUDIT_DB_NAME)"
+	@for f in $$(ls services/audit-svc/migrations/*.sql 2>/dev/null | sort); do \
+		echo "  Applying $$f ..."; \
+		PGPASSWORD=$(AUDIT_DB_PASSWORD) psql \
+			-h $(AUDIT_DB_HOST) -p $(AUDIT_DB_PORT) \
+			-U $(AUDIT_DB_USER) -d $(AUDIT_DB_NAME) \
+			-f $$f || exit 1; \
+	done
+	@echo "✓ audit-svc migrations complete"
+
+migrate: migrate-auth migrate-account migrate-audit ## Run ALL migrations (auth + account + audit)
 
 # ─── Performance testing — k6 ────────────────────────────────────────────────
 k6-up: ## Start k6 dashboard stack (InfluxDB + Grafana at http://localhost:3001)
@@ -238,18 +255,26 @@ run-account-svc: ## Run account-svc locally, tee logs to ./logs/account-svc.log
 
 run-auth-svc: ## Run auth-svc locally, tee logs to ./logs/auth-svc.log
 	@mkdir -p logs
-	@echo "→ auth-svc  http://localhost:8080  (logs → ./logs/auth-svc.log)"
+	@echo "→ auth-svc  http://localhost:8082  (logs → ./logs/auth-svc.log)"
 	@set -a; [ -f services/auth-svc/.env ] && . ./services/auth-svc/.env; set +a; \
 	 cd services/auth-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log
 
-run-all: ## Run both services locally with log capture (opens two background processes)
+run-audit-svc: ## Run audit-svc locally, tee logs to ./logs/audit-svc.log
 	@mkdir -p logs
-	@echo "→ Starting account-svc and auth-svc locally..."
-	@echo "→ Logs: ./logs/account-svc.log and ./logs/auth-svc.log"
+	@echo "→ audit-svc  http://localhost:8083  (logs → ./logs/audit-svc.log)"
+	@set -a; [ -f services/audit-svc/.env ] && . ./services/audit-svc/.env; set +a; \
+	 cd services/audit-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/audit-svc.log
+
+run-all: ## Run all three services locally with log capture (backgrounds auth + account, foregrounds audit)
+	@mkdir -p logs
+	@echo "→ Starting auth-svc, account-svc, and audit-svc locally..."
+	@echo "→ Logs: ./logs/auth-svc.log  ./logs/account-svc.log  ./logs/audit-svc.log"
 	@set -a; [ -f services/auth-svc/.env ] && . ./services/auth-svc/.env; set +a; \
 	 cd services/auth-svc    && go run ./cmd/server/... 2>&1 | tee ../../logs/auth-svc.log &
 	@set -a; [ -f services/account-svc/.env ] && . ./services/account-svc/.env; set +a; \
-	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log
+	 cd services/account-svc && go run ./cmd/server/... 2>&1 | tee ../../logs/account-svc.log &
+	@set -a; [ -f services/audit-svc/.env ] && . ./services/audit-svc/.env; set +a; \
+	 cd services/audit-svc   && go run ./cmd/server/... 2>&1 | tee ../../logs/audit-svc.log
 
 logs-follow: ## Tail all local service logs
 	@tail -f logs/*.log 2>/dev/null || echo "No log files yet. Run: make run-auth-svc or make run-account-svc"

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/nats-io/nats.go"
@@ -87,6 +88,12 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("connect nats: %w", err)
+	}
+
+	// RetryOnFailedConnect returns immediately even if not yet connected.
+	// Wait for the connection to be established before proceeding.
+	if err := waitForNATS(ctx, nc, cfg.NATSUrl); err != nil {
+		return nil, err
 	}
 	slog.Info("nats connected", slog.String("url", cfg.NATSUrl))
 
@@ -172,6 +179,25 @@ func decodeBase64Key(b64 string) ([]byte, error) {
 		return nil, fmt.Errorf("subject key must be 32 bytes (AES-256), got %d", len(key))
 	}
 	return key, nil
+}
+
+// waitForNATS blocks until the NATS connection is established or ctx is cancelled.
+// RetryOnFailedConnect returns a non-nil conn immediately even when not yet connected,
+// so we must poll IsConnected before attempting JetStream operations.
+func waitForNATS(ctx context.Context, nc *nats.Conn, url string) error {
+	const maxWait = 10 * time.Second
+	deadline := time.Now().Add(maxWait)
+	for !nc.IsConnected() {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("nats: timed out waiting for connection to %s after %s", url, maxWait)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("nats: context cancelled while waiting for connection: %w", ctx.Err())
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+	return nil
 }
 
 func parsePublicKey(b64 string) (*rsa.PublicKey, error) {

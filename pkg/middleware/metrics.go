@@ -65,12 +65,19 @@ func PrometheusHandler() http.Handler {
 }
 
 // Handler returns an HTTP middleware that records Prometheus metrics.
+// /metrics and /healthz/* are excluded — they are infrastructure paths,
+// not application traffic, and would skew request counts and error rates.
 func (m *MetricsCollector) Handler() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			if path == "/metrics" || len(path) >= 8 && path[:8] == "/healthz" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			start := time.Now()
 			method := r.Method
-			path := r.URL.Path
 
 			m.requestsInFlight.WithLabelValues(method).Inc()
 			defer m.requestsInFlight.WithLabelValues(method).Dec()
