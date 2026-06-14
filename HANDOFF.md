@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-13
+> Last updated: 2026-06-14
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -141,11 +141,11 @@ environment:
 - Feature flags: `show_account_metadata`, `banking_operation_hours`
 - Async audit publishing via NATS → NoopPublisher fallback
 
-### audit-svc (port 8083 — wired, not yet DB-migrated)
+### audit-svc (port 8083 — fully wired)
 - NATS consumer → `banking_audits` Postgres DB
 - HTTP query API for audit events
-- Wired into `docker-compose.yml` and `prometheus.yml`
-- Dockerfile uses `alpine:3.20` (same as other services — distroless has no wget for healthcheck)
+- Wired into `docker-compose.yml`, `prometheus.yml`, alert rules, and Promtail
+- `waitForNATS()` in container.go — polls `nc.IsConnected()` before calling `EnsureStream` so standalone (`make run-audit-svc`) doesn't fail when NATS hasn't fully connected yet
 - Migration still needs to run: `datasource/postgres/04_setup_banking_audits.sql` + `001_create_audit_events.up.sql`
 
 ### pkg/
@@ -155,7 +155,9 @@ environment:
 - `pkg/errors`, `pkg/observability`, `pkg/featureflag`, `pkg/idempotency`
 
 ### Observability
-- Prometheus scrapes auth-svc (`host.docker.internal:8082`), account-svc (`host.docker.internal:8081`)
+- Prometheus scrapes all three services via `host.docker.internal:808x`
+- `/metrics` and `/healthz/*` excluded from HTTP metrics and request logs in all services
+- Grafana Service Logs panel filters `/metrics` and `/healthz/*` at Loki query level
 - Grafana: Prometheus, Loki, Jaeger, Alertmanager datasources provisioned
 - Discord relay: Alertmanager → Discord notifications
 - Loki + Promtail: log aggregation from Docker containers and local `./logs/*.log`
@@ -176,6 +178,7 @@ environment:
 
 ## Traps to Avoid
 
+- ❌ `datasource/mongo/keyfile` must be a file, not a directory — if Git or Docker creates it as a directory, MongoDB fails with `cp: -r not specified`; delete and regenerate with `openssl rand -base64 756 > datasource/mongo/keyfile`
 - ❌ `go work edit -dropuse` in Docker — fragile, breaks silently when services are added
 - ❌ `sed` to write base64 RSA keys — corrupts `+`, `/`, `=`; use Python (script in CREDENTIALS.txt)
 - ❌ Distroless Docker runtime — no shell/wget, healthchecks fail; use `alpine:3.20` with `wget`
