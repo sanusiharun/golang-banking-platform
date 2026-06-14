@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+
+	"github.com/sanusi/banking/pkg/messaging"
 )
 
 const (
@@ -17,14 +19,15 @@ const (
 	streamMaxAge  = 7 * 24 * time.Hour
 )
 
-// NATSPublisher publishes AuditEvents to NATS JetStream.
+// NATSPublisher publishes AuditEvents to NATS JetStream via pkg/messaging.
 // It is the primary transport path: callers publish fire-and-forget and the
 // message is durably delivered to audit-svc via the AUDIT stream.
 //
 // Errors from Publish are logged but never returned — audit failure must not
-// block user-facing operations.
+// block user-facing operations. Wrap with Async() at the container layer to
+// make all call sites non-blocking without goroutine boilerplate.
 type NATSPublisher struct {
-	js nats.JetStreamContext
+	pub messaging.Publisher
 }
 
 // NewNATSPublisher creates a NATSPublisher and ensures the AUDIT stream exists.
@@ -34,29 +37,25 @@ func NewNATSPublisher(nc *nats.Conn) (*NATSPublisher, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get jetstream context: %w", err)
 	}
-
 	if err := ensureStream(js); err != nil {
 		return nil, fmt.Errorf("ensure AUDIT stream: %w", err)
 	}
-
-	return &NATSPublisher{js: js}, nil
+	return &NATSPublisher{pub: messaging.NewNATSPublisherFromJS(js)}, nil
 }
 
-// Publish marshals the event to JSON and publishes it asynchronously to
-// "audit.events.<action>". The caller must not block waiting for the ack.
-func (p *NATSPublisher) Publish(_ context.Context, event AuditEvent) error {
+// Publish marshals the event to JSON and publishes it to "audit.events.<action>".
+// Errors are logged and swallowed — audit failure must not block callers.
+func (p *NATSPublisher) Publish(ctx context.Context, event AuditEvent) error {
 	b, err := json.Marshal(event)
 	if err != nil {
 		slog.Error("audit: marshal event", slog.String("action", event.Action), slog.String("error", err.Error()))
-		return nil // don't propagate — audit failure must not block callers
+		return nil
 	}
-
-	if _, err := p.js.PublishAsync(event.NATSSubject(), b); err != nil {
+	if err := p.pub.Publish(ctx, event.NATSSubject(), b); err != nil {
 		slog.Error("audit: publish to nats",
 			slog.String("subject", event.NATSSubject()),
 			slog.String("error", err.Error()),
 		)
-		// Intentionally swallowed — callers treat audit as best-effort.
 	}
 	return nil
 }
@@ -67,12 +66,10 @@ func EnsureStream(js nats.JetStreamContext) error {
 	return ensureStream(js)
 }
 
-// ensureStream creates the AUDIT JetStream stream if it does not already exist.
-// Configuration mirrors the plan: file storage, 7-day max age, limits retention.
 func ensureStream(js nats.JetStreamContext) error {
 	_, err := js.StreamInfo(streamName)
 	if err == nil {
-		return nil // already exists
+		return nil
 	}
 	if !errors.Is(err, nats.ErrStreamNotFound) {
 		return fmt.Errorf("check stream info: %w", err)

@@ -10,8 +10,9 @@ import "context"
 //   - NoopPublisher  — silent drop for tests and local dev without NATS
 //
 // Contract: Publish must never block the calling goroutine for longer than a
-// brief timeout. Audit failure must never surface as a user-visible error —
-// call sites should fire-and-forget in a goroutine or ignore the returned error.
+// brief timeout, and audit failure must never surface as a user-visible error.
+// Wrap with Async() at the container layer to guarantee non-blocking behaviour
+// without goroutine boilerplate at every call site.
 type Publisher interface {
 	Publish(ctx context.Context, event AuditEvent) error
 }

@@ -2,7 +2,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
@@ -66,20 +65,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		observability.RecordError(ctx, err)
 		if errors.Is(err, services.ErrInvalidCredentials) {
-			// Publish failed-login audit event (fire-and-forget).
-			go func() {
-				_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-					ActorType:   pkgaudit.ActorTypeUser,
-					ActorID:     req.Username, // no UUID yet — username is the best identifier
-					ActorEmail:  req.Username,
-					Action:      pkgaudit.ActionAuthLoginFailed,
-					Status:      pkgaudit.StatusFailure,
-					ServiceName: "auth-svc",
-					IPAddress:   r.RemoteAddr,
-					UserAgent:   r.UserAgent(),
-					TraceID:     span.SpanContext().TraceID().String(),
-				})
-			}()
+			_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+				ActorType:   pkgaudit.ActorTypeUser,
+				ActorID:     req.Username,
+				ActorEmail:  req.Username,
+				Action:      pkgaudit.ActionAuthLoginFailed,
+				Status:      pkgaudit.StatusFailure,
+				ServiceName: "auth-svc",
+				IPAddress:   r.RemoteAddr,
+				UserAgent:   r.UserAgent(),
+				TraceID:     span.SpanContext().TraceID().String(),
+			})
 			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "INVALID_CREDENTIALS", err.Error()))
 			return
 		}
@@ -87,20 +83,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Publish successful login audit event (fire-and-forget).
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     resp.UserID,
-			ActorEmail:  req.Username,
-			Action:      pkgaudit.ActionAuthLogin,
-			Status:      pkgaudit.StatusSuccess,
-			ServiceName: "auth-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     resp.UserID,
+		ActorEmail:  req.Username,
+		Action:      pkgaudit.ActionAuthLogin,
+		Status:      pkgaudit.StatusSuccess,
+		ServiceName: "auth-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+	})
 
 	httpx.WriteSuccess(w, r, resp)
 }
@@ -133,18 +126,16 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     resp.UserID,
-			Action:      pkgaudit.ActionAuthTokenRefresh,
-			Status:      pkgaudit.StatusSuccess,
-			ServiceName: "auth-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     resp.UserID,
+		Action:      pkgaudit.ActionAuthTokenRefresh,
+		Status:      pkgaudit.StatusSuccess,
+		ServiceName: "auth-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+	})
 
 	httpx.WriteSuccess(w, r, resp)
 }
@@ -172,18 +163,16 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     req.RefreshToken, // token is the best available id at logout
-			Action:      pkgaudit.ActionAuthLogout,
-			Status:      pkgaudit.StatusSuccess,
-			ServiceName: "auth-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     req.RefreshToken,
+		Action:      pkgaudit.ActionAuthLogout,
+		Status:      pkgaudit.StatusSuccess,
+		ServiceName: "auth-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+	})
 
 	httpx.WriteSuccess(w, r, map[string]string{"message": "logged out"})
 }

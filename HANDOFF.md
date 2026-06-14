@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-14
+> Last updated: 2026-06-15
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -247,5 +247,6 @@ make lint              # golangci-lint
 | `datasource/docker-compose.yml` | Postgres, MySQL, MongoDB |
 | `prometheus.yml` | scrape targets + alertmanager |
 | `pkg/httpx/` | canonical HTTP response helpers |
-| `pkg/audit/` | audit Publisher interface + NATS/Noop implementations |
+| `pkg/audit/` | audit Publisher interface + NATS/HTTP/Noop/Async implementations |
+| `pkg/messaging/` | generic NATS JetStream Publisher + NATSConsumer — base layer for pkg/audit and future services |
 | `pkg/middleware/` | JWT auth, AuthenticateAny, RequireRole, rate limit, tracing |

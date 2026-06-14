@@ -186,7 +186,7 @@ func buildAuditPublisher(ctx context.Context, natsURL string) (pkgaudit.Publishe
 		return &pkgaudit.NoopPublisher{}, nil
 	}
 	slog.InfoContext(ctx, "audit publisher: NATS connected", slog.String("nats_url", natsURL))
-	return pub, nc
+	return pkgaudit.Async(pub), nc
 }
 
 // decodeBase64Key decodes a standard base64-encoded AES key from an env var.

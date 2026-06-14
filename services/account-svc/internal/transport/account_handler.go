@@ -71,20 +71,18 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     callerID,
-			Action:      pkgaudit.ActionAccountCreated,
-			Status:      pkgaudit.StatusSuccess,
-			Resource:    "account",
-			ResourceID:  resp.ID,
-			ServiceName: "account-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     callerID,
+		Action:      pkgaudit.ActionAccountCreated,
+		Status:      pkgaudit.StatusSuccess,
+		Resource:    "account",
+		ResourceID:  resp.ID,
+		ServiceName: "account-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+	})
 
 	httpx.WriteCreated(w, r, resp)
 }
@@ -138,20 +136,18 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     callerID,
-			Action:      pkgaudit.ActionAccountBalanceRead,
-			Status:      pkgaudit.StatusSuccess,
-			Resource:    "account",
-			ResourceID:  accountID,
-			ServiceName: "account-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     callerID,
+		Action:      pkgaudit.ActionAccountBalanceRead,
+		Status:      pkgaudit.StatusSuccess,
+		Resource:    "account",
+		ResourceID:  accountID,
+		ServiceName: "account-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+	})
 
 	httpx.WriteSuccess(w, r, resp)
 }
@@ -188,21 +184,19 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     callerID,
-			Action:      pkgaudit.ActionAccountCredit,
-			Status:      pkgaudit.StatusSuccess,
-			Resource:    "account",
-			ResourceID:  accountID,
-			ServiceName: "account-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-			Metadata:    map[string]any{"amount": req.Amount},
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     callerID,
+		Action:      pkgaudit.ActionAccountCredit,
+		Status:      pkgaudit.StatusSuccess,
+		Resource:    "account",
+		ResourceID:  accountID,
+		ServiceName: "account-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+		Metadata:    map[string]any{"amount": req.Amount},
+	})
 
 	httpx.WriteSuccess(w, r, resp)
 }
@@ -239,21 +233,19 @@ func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	go func() {
-		_ = h.audit.Publish(context.Background(), pkgaudit.AuditEvent{
-			ActorType:   pkgaudit.ActorTypeUser,
-			ActorID:     callerID,
-			Action:      pkgaudit.ActionAccountDebit,
-			Status:      pkgaudit.StatusSuccess,
-			Resource:    "account",
-			ResourceID:  accountID,
-			ServiceName: "account-svc",
-			IPAddress:   r.RemoteAddr,
-			UserAgent:   r.UserAgent(),
-			TraceID:     span.SpanContext().TraceID().String(),
-			Metadata:    map[string]any{"amount": req.Amount},
-		})
-	}()
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+		ActorType:   pkgaudit.ActorTypeUser,
+		ActorID:     callerID,
+		Action:      pkgaudit.ActionAccountDebit,
+		Status:      pkgaudit.StatusSuccess,
+		Resource:    "account",
+		ResourceID:  accountID,
+		ServiceName: "account-svc",
+		IPAddress:   r.RemoteAddr,
+		UserAgent:   r.UserAgent(),
+		TraceID:     span.SpanContext().TraceID().String(),
+		Metadata:    map[string]any{"amount": req.Amount},
+	})
 
 	httpx.WriteSuccess(w, r, resp)
 }

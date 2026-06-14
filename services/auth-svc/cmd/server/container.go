@@ -203,7 +203,7 @@ func buildAuditPublisher(natsURL string) (pkgaudit.Publisher, *nats.Conn) {
 	}
 
 	slog.Info("audit publisher: nats connected", slog.String("url", natsURL))
-	return pub, nc
+	return pkgaudit.Async(pub), nc
 }
 
 // buildAPIKeyStore wires the API key and service account stores.
