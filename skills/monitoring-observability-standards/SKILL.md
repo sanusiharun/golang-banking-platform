@@ -1,6 +1,20 @@
-# Skill: Monitoring & Observability Standards
+---
+name: monitoring-observability-standards
+description: Defines logging conventions (slog), Prometheus metrics, OpenTelemetry tracing, Grafana dashboard standards, alerting rules, SLO/SLI definitions, health check implementation, and the operational readiness checklist for all services in this repository.
+---
 
-> **Purpose:** Define the logging, metrics, tracing, alerting, dashboard, SLO, and operational readiness standards for all services in this repository. Derived from the monitoring domain and service implementations. Apply when building, reviewing, or operating any service.
+# Monitoring & Observability Standards
+
+Define the logging, metrics, tracing, alerting, dashboard, SLO, and operational readiness standards for all services in this repository. Derived from the monitoring domain and service implementations. Apply when building, reviewing, or operating any service.
+
+## When to Activate
+
+- Adding observability to a new service
+- Reviewing whether a service meets operational readiness requirements
+- Setting up alerts or dashboards for a service
+- Debugging a production issue and deciding which signals to look at
+- Asking "is this service observable?"
+- Adding a new service to the monitoring stack
 
 ---
 
@@ -75,7 +89,7 @@ All log fields use snake_case. Standard field names (use these everywhere — co
 - Raw passwords, tokens, API keys, or their hashes
 - PII beyond user ID (no email, no name in logs unless required)
 - Large payloads or binary blobs
-- Stack traces at Info or Warn level (Error level only, and only the error message + stack)
+- Stack traces at Info or Warn level (Error level only, and only the error message)
 
 ### 2.6 Structured Log Format
 
@@ -180,9 +194,9 @@ Every service bootstraps OTEL in `cmd/server/container.go`:
 otelProvider, err := observability.Bootstrap(ctx, observability.Config{
     ServiceName:    cfg.ServiceName,
     ServiceVersion: cfg.ServiceVersion,
-    Endpoint:       cfg.OTELEndpoint,   // default: "localhost:4317"
+    Endpoint:       cfg.OTELEndpoint,      // default: "localhost:4317"
     Enabled:        cfg.OTELEnabled,
-    SamplingRate:   cfg.OTELSamplingRate, // default: 1.0
+    SamplingRate:   cfg.OTELSamplingRate,  // default: 1.0
 })
 ```
 
@@ -204,7 +218,6 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
     defer span.End()
 
     span.SetAttributes(attribute.String("username", username))
-    // ...
     if err != nil {
         span.RecordError(err)
         span.SetStatus(codes.Error, err.Error())
@@ -249,7 +262,7 @@ Every service must have a Grafana dashboard with at minimum:
 | P50 / P95 / P99 latency | Time series | `histogram_quantile(0.99, ...)` |
 | Active service health | Stat | `/healthz/ready` up/down |
 | Top slow endpoints | Table | Sort by P99 latency |
-| Recent error logs | Logs panel | Loki query: `{service="{name}"} |= "level=error"` |
+| Recent error logs | Logs panel | Loki query: `{service="{name}"} \|= "level=error"` |
 
 ### 5.3 Dashboard JSON
 
@@ -311,15 +324,17 @@ Alerts are routed via `monitoring/alertmanager.yml`. Default receiver: Discord r
 | **Latency** | P99 of `http_request_duration_seconds` | Prometheus |
 | **Error budget** | `1 - availability` | Derived |
 
-### 7.2 SLO Targets (from goals.md NFR section)
+### 7.2 SLO Targets (per service)
 
-| Service | Endpoint | Availability SLO | Latency SLO (P99) |
-|---|---|---|---|
-| auth-svc | `/auth/login` | 99.9% | ≤ 500 ms |
-| auth-svc | `/auth/refresh` | 99.9% | ≤ 100 ms |
-| auth-svc | `/auth/apikey/introspect` | 99.99% | ≤ 10 ms (cache hit) |
+SLO targets are defined in each service's `goals.md` under the NFR section. This skill defines the measurement methodology; goals.md defines the thresholds.
 
-Each service's goals.md defines the SLO targets for that service. This file defines the measurement methodology.
+Example from auth-svc:
+
+| Endpoint | Availability SLO | Latency SLO (P99) |
+|---|---|---|
+| `/auth/login` | 99.9% | ≤ 500 ms |
+| `/auth/refresh` | 99.9% | ≤ 100 ms |
+| `/auth/apikey/introspect` | 99.99% | ≤ 10 ms (cache hit) |
 
 ### 7.3 SLO Panels
 
@@ -373,7 +388,7 @@ func (h *HealthHandler) Ready(w http.ResponseWriter, r *http.Request) {
 | Dependency | Always check | Notes |
 |---|---|---|
 | PostgreSQL | ✅ | `db.PingContext(ctx)` |
-| Redis | Only if `TOKEN_STORE=redis` or API key cache is enabled | `client.Ping(ctx)` |
+| Redis | Only if used as primary store | `client.Ping(ctx)` |
 | NATS | ❌ | NATS failure does not impair service functionality |
 | Flipt | ❌ | Flipt failure does not impair service functionality |
 
@@ -414,65 +429,14 @@ Use this before marking a service as production-ready:
 - [ ] `/healthz/ready` returns 503 when Postgres is unreachable
 - [ ] Readiness probe configured in docker-compose
 
-### Incident Response Considerations
+### Incident Response
 - [ ] On-call knows which Grafana dashboard to open first
 - [ ] Log queries for common failure modes documented
 - [ ] Runbook covers: service down, high error rate, high latency, DB unreachable
 
 ---
 
-## 10. Monitoring Architecture
-
-```mermaid
-graph TD
-    subgraph Services
-        AS[auth-svc :8082]
-        ACS[account-svc :8081]
-        ADS[audit-svc :8083]
-    end
-
-    subgraph Log Pipeline
-        PT[Promtail\nsidecar]
-        LK[Loki :9004]
-    end
-
-    subgraph Metrics Pipeline
-        PR[Prometheus :9001\nscrapes /metrics]
-        AM[Alertmanager :9002]
-        DR[Discord Relay]
-    end
-
-    subgraph Trace Pipeline
-        JA[Jaeger :9003\nOTLP :4317]
-    end
-
-    subgraph Visualisation
-        GR[Grafana :9000\nDatasources: Prometheus, Loki, Jaeger]
-    end
-
-    AS -->|stdout JSON| PT
-    ACS -->|stdout JSON| PT
-    ADS -->|stdout JSON| PT
-    PT -->|push| LK
-
-    PR -->|scrape| AS
-    PR -->|scrape| ACS
-    PR -->|scrape| ADS
-    PR -->|fire alerts| AM
-    AM --> DR
-
-    AS -->|OTLP gRPC| JA
-    ACS -->|OTLP gRPC| JA
-    ADS -->|OTLP gRPC| JA
-
-    GR --> PR
-    GR --> LK
-    GR --> JA
-```
-
----
-
-## 11. Adding a New Service to the Monitoring Stack
+## 10. Adding a New Service to the Monitoring Stack
 
 When a new service is created (e.g. `payment-svc` on port 8084):
 
@@ -492,3 +456,19 @@ When a new service is created (e.g. `payment-svc` on port 8084):
 5. **Dashboard** — Create `monitoring/grafana/provisioning/dashboards/payment-svc.json` with the required panels.
 
 6. **Docker Compose** — Add the service to the microservices `docker-compose.yml` and ensure it joins `banking-net`.
+
+---
+
+## 11. Monitoring Architecture
+
+```
+Services (auth-svc, account-svc, audit-svc)
+  │
+  ├── stdout JSON logs ──► Promtail ──► Loki :9004
+  │
+  ├── GET /metrics ◄── Prometheus :9001 ──► Alertmanager :9002 ──► Discord Relay
+  │
+  └── OTLP gRPC :4317 ──► Jaeger :9003
+                                │
+Grafana :9000 ◄────────────────┴── (all three datasources)
+```

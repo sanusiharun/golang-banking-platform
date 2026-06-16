@@ -1,6 +1,19 @@
-# Skill: Microservice Standards
+---
+name: microservice-standards
+description: Defines canonical folder structure, layering conventions, naming, error handling, HTTP response patterns, repository pattern, testing standards, and implementation checklist for Go microservices in this repository.
+---
 
-> **Purpose:** Define the folder structure, layering, naming, error handling, API, testing, and code style conventions for all microservices in this repository. Derived from `auth-svc`, `account-svc`, and `audit-svc`. Apply when building, reviewing, or extending any service.
+# Microservice Standards
+
+Define the folder structure, layering, naming, error handling, API, testing, and code style conventions for all microservices in this repository. Derived from `auth-svc`, `account-svc`, and `audit-svc`. Apply when building, reviewing, or extending any service.
+
+## When to Activate
+
+- Creating a new microservice or backend service
+- Reviewing a PR that adds or changes service code
+- Asking "how should I structure this service?"
+- Checking whether existing code follows project conventions
+- Onboarding to a service for the first time
 
 ---
 
@@ -166,7 +179,7 @@ return nil, errors.NewValidation("email is required")
 ### Handler error response
 ```go
 // Never manually write error JSON in handlers
-httpx.WriteError(w, r, err)       // maps domain error → correct HTTP status
+httpx.WriteError(w, r, err)         // maps domain error → correct HTTP status
 httpx.WriteHTTPError(w, r, httpErr) // explicit status + error code
 ```
 
@@ -283,7 +296,7 @@ func NewPostgresAccountRepository(db *gorm.DB) *PostgresAccountRepository {
 
 ## 11. Import Order
 
-Use `goimports`. Three groups, separated by blank lines:
+Use `goimports`. Four groups, separated by blank lines:
 
 ```go
 import (

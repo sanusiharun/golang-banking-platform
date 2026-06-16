@@ -1,6 +1,20 @@
-# Skill: Backend Delivery Framework
+---
+name: backend-delivery-framework
+description: Defines how backend projects are planned, designed, implemented, tracked, and reviewed using a five-document lifecycle (goals → context → architecture → progress-tracking → review) with full traceability from requirements to code.
+---
 
-> **Purpose:** Define how backend projects are planned, designed, implemented, tracked, and reviewed. This skill applies to microservices, backend APIs, greenfield projects, and reverse-engineering exercises. It is the governing methodology for all engineering work in this repository.
+# Backend Delivery Framework
+
+Define how backend projects are planned, designed, implemented, tracked, and reviewed. This skill applies to microservices, backend APIs, greenfield projects, and reverse-engineering exercises. It is the governing methodology for all engineering work in this repository.
+
+## When to Activate
+
+- Starting a new backend service or microservice
+- Reverse-engineering an existing service to extract documentation
+- Reviewing whether a service has adequate documentation
+- Onboarding a new engineer to an existing service
+- Conducting a post-delivery or post-incident review
+- Any time someone asks "where do I start?" for a new feature or service
 
 ---
 
@@ -81,7 +95,7 @@ Converts domain understanding into technical decisions. Must remain consistent w
 **Rules:**
 - Every architectural decision must explicitly satisfy one or more `FR`, `NFR`, or constraint from goals.md.
 - Mermaid diagrams are required for high-level architecture and request lifecycle. Additional diagrams are encouraged.
-- If a design decision deviates from the established service pattern (e.g. different layering), the deviation must be justified.
+- If a design decision deviates from the established service pattern, the deviation must be justified.
 
 ### 2.4 `progress-tracking.md` — Implementation Tracking
 
@@ -119,7 +133,7 @@ Evaluates the service against the original requirements and architecture. Writte
 - **Refactoring opportunities**
 
 **Rules:**
-- Every finding must reference the original `FR`, `NFR`, `BO`, `NFR`, or `AC` ID.
+- Every finding must reference the original `FR`, `NFR`, `BO`, or `AC` ID.
 - Unverified NFRs (e.g. latency targets not yet measured) must be listed as `⬜ Unverified`, not `✅ Pass`.
 - Recommendations must be actionable: file/function to change, not vague advice.
 
@@ -130,7 +144,7 @@ Evaluates the service against the original requirements and architecture. Writte
 ### Greenfield project
 
 ```
-Day 0:  Write goals.md fully. Draft context.md (domain sections only). 
+Day 0:  Write goals.md fully. Draft context.md (domain sections only).
         Create empty architecture.md, progress-tracking.md, review.md shells.
 Day 1+: Fill context.md as domain understanding develops.
         Write architecture.md as technical decisions are made.
@@ -142,7 +156,7 @@ Post-delivery: Write review.md.
 
 ```
 Step 1: Read all source code thoroughly.
-Step 2: Write goals.md (infer from code what the service's requirements must have been).
+Step 2: Write goals.md (infer from code what the requirements must have been).
 Step 3: Write context.md (explain domain, actors, workflows as they actually work).
 Step 4: Write architecture.md (document as-built, not as-intended).
 Step 5: Write progress-tracking.md (mark existing work complete; open items as ⬜).
