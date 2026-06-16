@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-15
+> Last updated: 2026-06-16
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -161,6 +161,21 @@ environment:
 - Grafana: Prometheus, Loki, Jaeger, Alertmanager datasources provisioned
 - Discord relay: Alertmanager → Discord notifications
 - Loki + Promtail: log aggregation from Docker containers and local `./logs/*.log`
+
+---
+
+## Session 2026-06-16 — Documentation & Skills
+
+- Created `docs/` with full auth-svc reverse-engineering documentation:
+  - `docs/goals.md` — business objectives, FR/NFR/constraints, acceptance criteria
+  - `docs/context.md` — domain overview, bounded context, actors, workflows, system integrations
+  - `docs/architecture.md` — Mermaid diagrams, component design, API, storage DDL, security/observability design
+  - `docs/progress-tracking.md` — epics, tasks with current status, blocker table, tech debt register
+  - `docs/review.md` — requirement compliance (24/24 FR pass), architecture compliance, security posture, recommendations
+- Created `skills/` with three reusable engineering methodology documents:
+  - `skills/backend-delivery-framework.md` — documentation lifecycle, traceability rules, delivery workflow, engineering governance
+  - `skills/microservice-standards.md` — folder structure, layering, naming, error handling, testing standards
+  - `skills/monitoring-observability-standards.md` — logging, metrics, tracing, alerting, SLO, health checks, operational readiness checklist
 
 ---
 
