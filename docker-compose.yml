@@ -82,6 +82,36 @@ services:
       start_period: 15s
 
   # ──────────────────────────────────────────────────────────────────────────
+  # notification-svc — centralised notification platform (port 8084)
+  # ──────────────────────────────────────────────────────────────────────────
+  notification-svc:
+    build:
+      context: .
+      dockerfile: services/notification-svc/Dockerfile
+    container_name: banking-notification-svc
+    restart: unless-stopped
+    networks:
+      - banking-net
+      - datasource_datasource_net
+    depends_on:
+      auth-svc:
+        condition: service_started
+    env_file:
+      - services/notification-svc/.env
+    environment:
+      DB_HOST: ds_postgres
+      NATS_URL: nats://platform-nats:4222
+      OTEL_EXPORTER_OTLP_ENDPOINT: banking-jaeger:4317
+    ports:
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/healthz/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────────────────
   # audit-svc — NATS consumer + audit log query API (port 8083)
   # ──────────────────────────────────────────────────────────────────────────
   audit-svc:

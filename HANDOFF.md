@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-16
+> Last updated: 2026-06-17
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -11,6 +11,7 @@ Production-grade Go banking platform monorepo:
 - `auth-svc` (8082) — RS256 JWT, refresh tokens, logout, service accounts, API keys
 - `account-svc` (8081) — account CRUD, credit/debit, balance
 - `audit-svc` (8083) — NATS consumer → Postgres audit log (scaffolded, not wired yet)
+- `notification-svc` (8084) — centralised notification platform: multi-channel delivery, templates, scheduler
 - `pkg/` — shared Go workspace module (httpx, middleware, audit, errors, observability, etc.)
 
 ---
@@ -20,9 +21,10 @@ Production-grade Go banking platform monorepo:
 ```
 golang-banking-platform/
 ├── services/
-│   ├── auth-svc/          HTTP :8082
-│   ├── account-svc/       HTTP :8081
-│   └── audit-svc/         HTTP :8083 (scaffolded)
+│   ├── auth-svc/              HTTP :8082
+│   ├── account-svc/           HTTP :8081
+│   ├── audit-svc/             HTTP :8083 (scaffolded)
+│   └── notification-svc/      HTTP :8084 (multi-channel, templates, scheduler)
 ├── pkg/                   shared Go module (github.com/sanusi/banking/pkg)
 ├── datasource/            docker-compose — Postgres :5432, MySQL :3306, Mongo :27017
 ├── platform/              docker-compose — Redis :9050, Flipt :9051/:9052, NATS :9053, Metabase :9055
@@ -39,7 +41,7 @@ golang-banking-platform/
 
 | Range | Owner |
 |---|---|
-| `808x` | Microservices: auth-svc=8082, account-svc=8081, audit-svc=8083, next=8084… |
+| `808x` | Microservices: auth-svc=8082, account-svc=8081, audit-svc=8083, notification-svc=8084, next=8085… |
 | `900x` | Monitoring: Grafana=9000, Prometheus=9001, Alertmanager=9002, Jaeger=9003, Loki=9004, Discord=9005 |
 | `905x` | Platform: Redis=9050, Flipt UI=9051, Flipt gRPC=9052, NATS=9053, NATS UI=9054, Metabase=9055 |
 | `4317/4318` | OTLP — standard wire protocol, never change |
@@ -185,7 +187,7 @@ environment:
 - [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist (currently relies on Docker network isolation only)
 - [ ] **Logout ActorID** — logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`
 - [ ] **API key cache warm-up** — pre-populate Redis on auth-svc startup to avoid cold-start miss under load
-- [ ] **payment-svc** — port 8084, same Dockerfile pattern as auth-svc/account-svc
+- [ ] **payment-svc** — port 8085, same Dockerfile pattern as auth-svc/account-svc
 - [ ] **Integration tests** — scaffold exists in `services/*/tests/integration/`, no tests written
 - [ ] **k6 load tests** — scripts in `performance-test-k6/`, run with `make k6-smoke`
 
