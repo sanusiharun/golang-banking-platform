@@ -10,6 +10,7 @@ require (
 	github.com/jackc/pgx/v5 v5.5.5
 	github.com/nats-io/nats.go v1.37.0
 	github.com/sanusi/banking/pkg v0.0.0
+	go.opentelemetry.io/otel v1.43.0
 	gorm.io/gorm v1.25.11
 )
 
@@ -23,15 +24,13 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.24.0 // indirect
-	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/compress v1.17.9 // indirect
+	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -45,9 +44,8 @@ require (
 	github.com/redis/go-redis/v9 v9.19.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/bridges/otelslog v0.10.0 // indirect
-	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.9.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.28.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.29.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0 // indirect
 	go.opentelemetry.io/otel/exporters/prometheus v0.65.0 // indirect
 	go.opentelemetry.io/otel/log v0.11.0 // indirect
@@ -56,7 +54,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.9.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
-	go.opentelemetry.io/proto/otlp v1.4.0 // indirect
+	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
