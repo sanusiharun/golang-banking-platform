@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-17
+> Last updated: 2026-06-19
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -163,6 +163,16 @@ environment:
 - Grafana: Prometheus, Loki, Jaeger, Alertmanager datasources provisioned
 - Discord relay: Alertmanager → Discord notifications
 - Loki + Promtail: log aggregation from Docker containers and local `./logs/*.log`
+
+### notification-svc
+
+- Full 5-document lifecycle written (reverse-engineered from code, 2026-06-19)
+- `docs/goals.md` — 17 FR, 9 NFR, 10 constraints, 17 acceptance criteria, service boundaries
+- `docs/context.md` — domain overview, bounded context diagram, 6 business workflows, actor table, risk register, upstream/downstream systems
+- `docs/architecture.md` — Mermaid diagrams (high-level + sequence), layering rules, package tree, SQL DDL for 3 tables, full API table, security/observability/reliability design
+- `docs/progress-tracking.md` — 7 epics, 48 tasks (most ✅), 10 tech debt items (TD-01–TD-10)
+- `docs/review.md` — FR compliance (16/17 pass, FR-02 partial — stubs), NFR (3 unverified: latency/throughput), 10 TD items, immediate/short/medium recommendations
+- Key gaps: EMAIL/SMS/PUSH/WHATSAPP are stubs (TD-01–TD-04); no integration tests; scheduler not distributed (TD-06); no retry backoff (TD-05)
 
 ---
 
