@@ -6,4 +6,5 @@ use (
 	./services/audit-svc
 	./services/auth-svc
 	./services/notification-svc
+	./services/payment-svc
 )

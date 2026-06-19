@@ -11,6 +11,7 @@ COPY services/account-svc/go.mod services/account-svc/go.sum* ./services/account
 COPY services/auth-svc/go.mod services/auth-svc/go.sum* ./services/auth-svc/
 COPY services/audit-svc/go.mod services/audit-svc/go.sum* ./services/audit-svc/
 COPY services/notification-svc/go.mod services/notification-svc/go.sum* ./services/notification-svc/
+COPY services/payment-svc/go.mod services/payment-svc/go.sum* ./services/payment-svc/
 
 RUN go work sync
 

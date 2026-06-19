@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-19
+> Last updated: 2026-06-19 (payment-svc scaffold)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -164,6 +164,22 @@ environment:
 - Discord relay: Alertmanager → Discord notifications
 - Loki + Promtail: log aggregation from Docker containers and local `./logs/*.log`
 
+### payment-svc (port 8085 — docs complete, implementation not started)
+
+- Full 5-document lifecycle written (2026-06-19)
+- `docs/payment-svc/goals.md` — 5 BO, 20 FR, 14 NFR, 6 constraints, 6 assumptions, 12 acceptance criteria, service boundaries
+- `docs/payment-svc/context.md` — domain overview, bounded context diagram, 8 business workflows (BW-01–BW-08), actor table, upstream/downstream systems, 8 risks (R-01–R-08), assumptions revisited
+- `docs/payment-svc/architecture.md` — Mermaid diagrams (high-level + request lifecycle), layered component design, full package tree, SQL DDL for 3 tables (`transactions`, `reversals`, `idempotency_records`), Redis key patterns, full API table, integration patterns, security/observability/reliability design
+- `docs/payment-svc/progress-tracking.md` — 9 epics (E1–E9), all tasks ⬜, dependency graph, 3 tech debt items (TD-01–TD-03)
+- `docs/payment-svc/review.md` — all criteria ⬜ Unverified; P0 recommendations: implement compensation flow and idempotency before opening any endpoints
+- Key design decisions: Redis SET NX for first-writer-wins idempotency; DB unique constraint on `idempotency_key` and `reversal.original_txn_id` as backstops; circuit breaker + exponential backoff on Account Service; NATS event publishing is non-blocking fire-and-forget; NATS consumer uses queue group for exactly-once delivery across instances
+- **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; all payment endpoints return 501 until E4 implemented
+- Uses `pkg/idempotency.DualStore` (Redis SET NX + Postgres fallback) — no custom idempotency code
+- Uses `pkg/httpclient` for Account Service calls (retry + backoff built in)
+- Amount stored as `BIGINT` (minor currency units) matching account-svc convention
+- Run `cd services/payment-svc && go mod tidy` before first build to generate go.sum
+- Run `datasource/postgres/06_setup_banking_payments.sql` as superuser before starting the service
+
 ### notification-svc
 
 - Full 5-document lifecycle written (reverse-engineered from code, 2026-06-19)
@@ -197,7 +213,10 @@ environment:
 - [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist (currently relies on Docker network isolation only)
 - [ ] **Logout ActorID** — logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`
 - [ ] **API key cache warm-up** — pre-populate Redis on auth-svc startup to avoid cold-start miss under load
-- [ ] **payment-svc** — port 8085, same Dockerfile pattern as auth-svc/account-svc
+- [ ] **payment-svc E4 (service layer)** — scaffold done; implement `InitiateTransfer`, `Reverse`, `Cancel`, `Retry` in `internal/service/`; E5-T05 handlers already wired, just need the service logic
+- [ ] **payment-svc go.sum** — run `cd services/payment-svc && go mod tidy` once before first build
+- [ ] **payment-svc DB setup** — run `datasource/postgres/06_setup_banking_payments.sql` as superuser
+- [ ] **payment-svc ACCOUNT_SVC_API_KEY** — `services/payment-svc/.env` has `ACCOUNT_SVC_API_KEY=` empty; generate a `bp_live_*` service account key via `POST /internal/service-accounts` on auth-svc and paste it in
 - [ ] **Integration tests** — scaffold exists in `services/*/tests/integration/`, no tests written
 - [ ] **k6 load tests** — scripts in `performance-test-k6/`, run with `make k6-smoke`
 
@@ -268,6 +287,7 @@ make lint              # golangci-lint
 | `services/auth-svc/.env` | auth-svc local config |
 | `services/account-svc/.env` | account-svc local config |
 | `services/audit-svc/.env` | audit-svc local config |
+| `services/payment-svc/.env` | payment-svc local config (`ACCOUNT_SVC_API_KEY` must be filled in) |
 | `docker-compose.yml` | microservices stack |
 | `platform/docker-compose.yml` | Redis, Flipt, NATS, Metabase |
 | `monitoring/docker-compose.infra.yml` | Jaeger, Prometheus, Grafana, Loki, Alertmanager |

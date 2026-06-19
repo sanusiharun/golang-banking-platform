@@ -112,6 +112,41 @@ services:
       start_period: 15s
 
   # ──────────────────────────────────────────────────────────────────────────
+  # payment-svc — transaction orchestration (port 8085)
+  # ──────────────────────────────────────────────────────────────────────────
+  payment-svc:
+    build:
+      context: .
+      dockerfile: services/payment-svc/Dockerfile
+    container_name: banking-payment-svc
+    restart: unless-stopped
+    networks:
+      - banking-net
+      - datasource_datasource_net
+    depends_on:
+      auth-svc:
+        condition: service_started
+      account-svc:
+        condition: service_started
+    env_file:
+      - services/payment-svc/.env
+    environment:
+      DB_HOST: ds_postgres
+      NATS_URL: nats://platform-nats:4222
+      OTEL_EXPORTER_OTLP_ENDPOINT: banking-jaeger:4317
+      REDIS_ADDR: platform-redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      ACCOUNT_SVC_URL: http://banking-account-svc:8081
+    ports:
+      - "8085:8085"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8085/healthz/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ──────────────────────────────────────────────────────────────────────────
   # audit-svc — NATS consumer + audit log query API (port 8083)
   # ──────────────────────────────────────────────────────────────────────────
   audit-svc:

@@ -20,18 +20,18 @@ COPY services/payment-svc/go.mod services/payment-svc/go.sum* ./services/payment
 
 RUN go work sync
 
-RUN cd services/notification-svc && go mod download
+RUN cd services/payment-svc && go mod download
 
 # Copy full source.
 COPY pkg/ ./pkg/
-COPY services/notification-svc/ ./services/notification-svc/
+COPY services/payment-svc/ ./services/payment-svc/
 
-RUN cd services/notification-svc && \
+RUN cd services/payment-svc && \
     CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
       -ldflags="-w -s -X main.version=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" \
       -trimpath \
-      -o /bin/notification-svc \
+      -o /bin/payment-svc \
       ./cmd/server
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -41,8 +41,8 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata wget
 
-COPY --from=builder /bin/notification-svc /notification-svc
+COPY --from=builder /bin/payment-svc /payment-svc
 
-EXPOSE 8084
+EXPOSE 8085
 
-ENTRYPOINT ["/notification-svc"]
+ENTRYPOINT ["/payment-svc"]
