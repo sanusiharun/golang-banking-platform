@@ -17,16 +17,22 @@
  *   k6 run -e BEARER_TOKEN=<token> performance-test-k6/account-flow.js
  */
 
-// Per-service base URLs — services run on separate ports
+// Gateway — single entry point via Traefik (all routes through port 80)
+export const GATEWAY_URL = __ENV.GATEWAY_URL || "http://localhost";
+
+// Per-service base URLs — used by legacy flows that hit services directly
 export const AUTH_URL    = __ENV.AUTH_URL    || "http://localhost:8082";
 export const ACCOUNT_URL = __ENV.ACCOUNT_URL || "http://localhost:8081";
+export const AUDIT_URL          = __ENV.AUDIT_URL          || "http://localhost:8083";
+export const NOTIFICATION_URL   = __ENV.NOTIFICATION_URL   || "http://localhost:8084";
+export const PAYMENT_URL        = __ENV.PAYMENT_URL        || "http://localhost:8085";
 
 // Kept for TEMPLATE.js backward compatibility
 export const BASE_URL = __ENV.BASE_URL || AUTH_URL;
 
 // Label for log output — auto-detected from URL
-export const ENV_LABEL = (__ENV.AUTH_URL || __ENV.ACCOUNT_URL || __ENV.BASE_URL)
-  ? ((__ENV.AUTH_URL || "").includes("staging") ? "STAGING" : "REMOTE")
+export const ENV_LABEL = (__ENV.GATEWAY_URL || __ENV.AUTH_URL || __ENV.ACCOUNT_URL || __ENV.BASE_URL)
+  ? ((__ENV.GATEWAY_URL || __ENV.AUTH_URL || "").includes("staging") ? "STAGING" : "REMOTE")
   : "LOCAL";
 
 /**

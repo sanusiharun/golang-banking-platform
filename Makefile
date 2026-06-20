@@ -26,7 +26,7 @@ else
 endif
 .SHELLFLAGS := -c
 
-.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account migrate-audit tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress gateway-test help
+.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account migrate-audit tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress k6-orchestration-smoke k6-orchestration-load k6-orchestration-stress k6-gateway-smoke gateway-test help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -232,6 +232,22 @@ k6-load: ## Load test all flows with InfluxDB output (requires make k6-up first)
 		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/auth-flow.js
 	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
 		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/account-flow.js
+
+k6-orchestration-smoke: ## Smoke test full cross-service orchestration through gateway (1 VU, 1 iteration)
+	k6 run -e SCENARIO=smoke performance-test-k6/orchestration-flow.js
+
+k6-orchestration-load: ## Load test full orchestration through gateway with InfluxDB output (requires make k6-up first)
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 \
+		-e GATEWAY_URL=http://banking-traefik /scripts/orchestration-flow.js
+
+k6-orchestration-stress: ## Stress test full orchestration through gateway with InfluxDB output (requires make k6-up first)
+	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
+		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 \
+		-e GATEWAY_URL=http://banking-traefik /scripts/orchestration-flow.js
+
+k6-gateway-smoke: ## Validate Traefik routing, security headers, and rate limiting (smoke only)
+	k6 run -e SCENARIO=smoke performance-test-k6/gateway-flow.js
 
 k6-stress: ## Stress test all flows with InfluxDB output (requires make k6-up first)
 	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
