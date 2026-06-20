@@ -223,37 +223,38 @@ k6-up: ## Start k6 dashboard stack (InfluxDB + Grafana at http://localhost:3001)
 k6-down: ## Stop k6 dashboard stack
 	docker compose -f performance-test-k6/docker-compose.yml down
 
-k6-smoke: ## Smoke test all flows (1 VU, 1 iteration — quick sanity check)
-	k6 run -e SCENARIO=smoke performance-test-k6/auth-flow.js
-	k6 run -e SCENARIO=smoke performance-test-k6/account-flow.js
+# k6 runs entirely via Docker — no local k6 install required.
+# Container-side URLs use Docker container names on banking-net.
+K6_RUN      = docker compose -f performance-test-k6/docker-compose.yml run --rm k6 run
+K6_GATEWAY  = -e GATEWAY_URL=http://banking-traefik
+K6_DASHBOARD= -e TRAEFIK_DASHBOARD_URL=http://banking-traefik:8080
+K6_AUTH     = -e AUTH_URL=http://banking-auth-svc:8082
+K6_ACCOUNT  = -e ACCOUNT_URL=http://banking-account-svc:8081
+K6_URLS     = $(K6_GATEWAY) $(K6_DASHBOARD) $(K6_AUTH) $(K6_ACCOUNT)
 
-k6-load: ## Load test all flows with InfluxDB output (requires make k6-up first)
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/auth-flow.js
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 /scripts/account-flow.js
+k6-smoke: ## Smoke test auth + account flows via Docker (1 VU, 1 iteration)
+	$(K6_RUN) -e SCENARIO=smoke $(K6_AUTH) $(K6_ACCOUNT) /scripts/auth-flow.js
+	$(K6_RUN) -e SCENARIO=smoke $(K6_AUTH) $(K6_ACCOUNT) /scripts/account-flow.js
+
+k6-load: ## Load test auth + account flows with InfluxDB output (requires make k6-up first)
+	$(K6_RUN) -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 $(K6_AUTH) $(K6_ACCOUNT) /scripts/auth-flow.js
+	$(K6_RUN) -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 $(K6_AUTH) $(K6_ACCOUNT) /scripts/account-flow.js
 
 k6-orchestration-smoke: ## Smoke test full cross-service orchestration through gateway (1 VU, 1 iteration)
-	k6 run -e SCENARIO=smoke performance-test-k6/orchestration-flow.js
+	$(K6_RUN) -e SCENARIO=smoke $(K6_URLS) /scripts/orchestration-flow.js
 
 k6-orchestration-load: ## Load test full orchestration through gateway with InfluxDB output (requires make k6-up first)
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 \
-		-e GATEWAY_URL=http://banking-traefik /scripts/orchestration-flow.js
+	$(K6_RUN) -e SCENARIO=load --out influxdb=http://k6-influxdb:8086/k6 $(K6_URLS) /scripts/orchestration-flow.js
 
 k6-orchestration-stress: ## Stress test full orchestration through gateway with InfluxDB output (requires make k6-up first)
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 \
-		-e GATEWAY_URL=http://banking-traefik /scripts/orchestration-flow.js
+	$(K6_RUN) -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 $(K6_URLS) /scripts/orchestration-flow.js
 
-k6-gateway-smoke: ## Validate Traefik routing, security headers, and rate limiting (smoke only)
-	k6 run -e SCENARIO=smoke performance-test-k6/gateway-flow.js
+k6-gateway-smoke: ## Validate Traefik routing, security headers, and rate limiting via Docker
+	$(K6_RUN) -e SCENARIO=smoke $(K6_URLS) /scripts/gateway-flow.js
 
-k6-stress: ## Stress test all flows with InfluxDB output (requires make k6-up first)
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 /scripts/auth-flow.js
-	docker compose -f performance-test-k6/docker-compose.yml run --rm k6 \
-		run -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 /scripts/account-flow.js
+k6-stress: ## Stress test auth + account flows with InfluxDB output (requires make k6-up first)
+	$(K6_RUN) -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 $(K6_AUTH) $(K6_ACCOUNT) /scripts/auth-flow.js
+	$(K6_RUN) -e SCENARIO=stress --out influxdb=http://k6-influxdb:8086/k6 $(K6_AUTH) $(K6_ACCOUNT) /scripts/account-flow.js
 
 # ─── Local run (logs piped to ./logs/*.log for Promtail to scrape) ───────────
 #

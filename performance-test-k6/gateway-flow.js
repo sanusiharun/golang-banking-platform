@@ -15,7 +15,7 @@ import http                      from "k6/http";
 import { check, group, sleep }   from "k6";
 import { Rate, Counter, Trend }  from "k6/metrics";
 
-import { GATEWAY_URL, ENV_LABEL, buildHeaders } from "./lib/config.js";
+import { GATEWAY_URL, TRAEFIK_DASHBOARD_URL, ENV_LABEL, buildHeaders } from "./lib/config.js";
 import { scenarios, baseThresholds }             from "./lib/scenarios.js";
 import { safeJson }                              from "./lib/helpers.js";
 
@@ -160,7 +160,7 @@ export default function () {
 
   // ── Test 5: Traefik dashboard accessible ────────────────────────────────
   group("05 Traefik dashboard API", () => {
-    const dash = http.get("http://localhost:8080/api/overview");
+    const dash = http.get(`${TRAEFIK_DASHBOARD_URL}/api/overview`);
 
     const ok = check(dash, {
       "dashboard: status 200": (r) => r.status === 200,

@@ -18,7 +18,8 @@
  */
 
 // Gateway — single entry point via Traefik (all routes through port 80)
-export const GATEWAY_URL = __ENV.GATEWAY_URL || "http://localhost";
+export const GATEWAY_URL           = __ENV.GATEWAY_URL           || "http://localhost";
+export const TRAEFIK_DASHBOARD_URL = __ENV.TRAEFIK_DASHBOARD_URL || "http://localhost:8080";
 
 // Per-service base URLs — used by legacy flows that hit services directly
 export const AUTH_URL    = __ENV.AUTH_URL    || "http://localhost:8082";
