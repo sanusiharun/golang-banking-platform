@@ -12,7 +12,7 @@
 ifeq ($(OS),Windows_NT)
     # Derive bash from Git's installation to avoid picking up WSL bash.
     # e.g. C:\Program Files\Git\cmd\git.exe  →  C:\Program Files\Git\bin\bash.exe
-    GIT_EXE   := $(shell where git 2>NUL | head -n1)
+    GIT_EXE   := $(firstword $(shell where git 2>NUL))
     GIT_ROOT  := $(if $(GIT_EXE),$(patsubst %/cmd/git.exe,%,$(subst \,/,$(GIT_EXE))),)
     GIT_BASH  := $(if $(GIT_ROOT),$(GIT_ROOT)/bin/bash.exe,)
     ifeq ($(wildcard $(GIT_BASH)),)
@@ -289,4 +289,4 @@ generate: proto ## Run all code generators
 
 # ─── Traefik gateway ──────────────────────────────────────────────────────────
 gateway-test: ## Run end-to-end gateway integration tests (requires make services-up)
-	bash scripts/test-gateway.sh
+	$(SHELL) scripts/test-gateway.sh
