@@ -1,0 +1,61 @@
+# traefik/dynamic.yml — HTTP routers and services (file provider)
+#
+# All backend URLs use Docker container names on banking-net.
+# Traefik reads this file directly — no Docker socket needed.
+# Changes to this file are hot-reloaded (watch: true in traefik.yml).
+
+http:
+
+  routers:
+
+    auth-svc:
+      rule: "PathPrefix(`/auth`) || PathPrefix(`/internal`)"
+      entryPoints: [web]
+      service: auth-svc
+
+    account-svc:
+      rule: "PathPrefix(`/v1/accounts`) || PathPrefix(`/debug`)"
+      entryPoints: [web]
+      service: account-svc
+
+    audit-svc:
+      rule: "PathPrefix(`/v1/audit`)"
+      entryPoints: [web]
+      service: audit-svc
+
+    notification-svc:
+      rule: "PathPrefix(`/v1/notifications`) || PathPrefix(`/v1/templates`) || PathPrefix(`/v1/schedules`)"
+      entryPoints: [web]
+      service: notification-svc
+
+    payment-svc:
+      rule: "PathPrefix(`/v1/payments`)"
+      entryPoints: [web]
+      service: payment-svc
+
+  services:
+
+    auth-svc:
+      loadBalancer:
+        servers:
+          - url: "http://banking-auth-svc:8082"
+
+    account-svc:
+      loadBalancer:
+        servers:
+          - url: "http://banking-account-svc:8081"
+
+    audit-svc:
+      loadBalancer:
+        servers:
+          - url: "http://banking-audit-svc:8083"
+
+    notification-svc:
+      loadBalancer:
+        servers:
+          - url: "http://banking-notification-svc:8084"
+
+    payment-svc:
+      loadBalancer:
+        servers:
+          - url: "http://banking-payment-svc:8085"

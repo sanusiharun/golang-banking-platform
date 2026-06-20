@@ -1,25 +1,26 @@
 # traefik/traefik.yml — Traefik v3 static configuration
 #
+# Uses file provider — no Docker socket needed (Windows Docker Desktop compatible).
+# Routes are defined in traefik/dynamic.yml and hot-reloaded on change.
+#
 # Entrypoints:
 #   web       → :80   (all public API traffic)
-#   dashboard → :8080 (Traefik dashboard — dev only, insecure)
-#
-# Routing is handled entirely via Docker labels on each service container.
-# Dynamic config (middlewares, routers, services) lives in docker-compose.yml labels.
+#   dashboard → :8080 (Traefik dashboard — dev only)
 
 api:
   dashboard: true
   insecure: true        # dashboard at http://localhost:8080 — disable in production
+
+ping: {}                # enables /ping health endpoint (used by Docker healthcheck)
 
 entryPoints:
   web:
     address: ":80"
 
 providers:
-  docker:
-    endpoint: "tcp://host.docker.internal:2375"  # Docker Desktop TCP (enable in Docker Desktop → Settings → General)
-    exposedByDefault: false   # only containers with traefik.enable=true are routed
-    network: banking-net      # use this network for backend connections
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true         # hot-reload routes without restarting Traefik
 
 log:
   level: INFO
