@@ -17,7 +17,7 @@ entryPoints:
 
 providers:
   docker:
-    endpoint: "npipe:////./pipe/docker_engine"   # Windows Docker Desktop named pipe
+    endpoint: "tcp://host.docker.internal:2375"  # Docker Desktop TCP (enable in Docker Desktop → Settings → General)
     exposedByDefault: false   # only containers with traefik.enable=true are routed
     network: banking-net      # use this network for backend connections
 

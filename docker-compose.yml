@@ -42,10 +42,6 @@ services:
       - "80:80"       # public HTTP entrypoint
       - "8080:8080"   # Traefik dashboard (dev only)
     volumes:
-      # Windows Docker Desktop uses a named pipe, not a Unix socket
-      - type: npipe
-        source: \\.\pipe\docker_engine
-        target: \\.\pipe\docker_engine
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ping || exit 1"]
