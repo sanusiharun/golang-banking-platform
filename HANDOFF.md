@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-19 (payment-svc scaffold)
+> Last updated: 2026-06-20 (Traefik gateway integration)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -41,10 +41,26 @@ golang-banking-platform/
 
 | Range | Owner |
 |---|---|
-| `808x` | Microservices: auth-svc=8082, account-svc=8081, audit-svc=8083, notification-svc=8084, next=8085… |
+| `80` | **Traefik gateway** — single HTTP entry point for all services |
+| `8080` | **Traefik dashboard** — dev only (`http://localhost:8080`) |
+| `808x` | Microservices (direct): auth-svc=8082, account-svc=8081, audit-svc=8083, notification-svc=8084, payment-svc=8085 |
 | `900x` | Monitoring: Grafana=9000, Prometheus=9001, Alertmanager=9002, Jaeger=9003, Loki=9004, Discord=9005 |
 | `905x` | Platform: Redis=9050, Flipt UI=9051, Flipt gRPC=9052, NATS=9053, NATS UI=9054, Metabase=9055 |
 | `4317/4318` | OTLP — standard wire protocol, never change |
+
+### Gateway Route Map
+
+| Path prefix | Service | Port |
+|---|---|---|
+| `/auth/*` | auth-svc | 8082 |
+| `/internal/*` | auth-svc | 8082 |
+| `/v1/accounts/*` | account-svc | 8081 |
+| `/debug/*` | account-svc | 8081 |
+| `/v1/audit/*` | audit-svc | 8083 |
+| `/v1/notifications/*` | notification-svc | 8084 |
+| `/v1/templates/*` | notification-svc | 8084 |
+| `/v1/schedules/*` | notification-svc | 8084 |
+| `/v1/payments/*` | payment-svc | 8085 |
 
 ---
 
@@ -82,20 +98,28 @@ make stack-up
 
 ### Verify everything is healthy
 ```powershell
-# Service health
-curl http://localhost:8082/healthz/ready
-curl http://localhost:8081/healthz/ready
+# Gateway (single entry point for all services)
+curl http://localhost/auth/login -X POST -H "Content-Type: application/json" `
+  -d '{"username":"admin","password":"Admin@12345"}'
 
-# Auth flow
-curl -X POST http://localhost:8082/auth/login `
-  -H "Content-Type: application/json" `
-  -d '{"email":"admin@bank.com","password":"password123"}'
+# Traefik dashboard (see all routes registered)
+# http://localhost:8080
+
+# Direct service health (bypasses gateway)
+curl http://localhost:8082/healthz/ready   # auth-svc
+curl http://localhost:8081/healthz/ready   # account-svc
+curl http://localhost:8083/healthz/ready   # audit-svc
+curl http://localhost:8084/healthz/ready   # notification-svc
+curl http://localhost:8085/healthz/ready   # payment-svc
 
 # Prometheus targets — all should be UP
 # http://localhost:9001/targets
 
 # Grafana dashboards
 # http://localhost:9000  (admin / admin)
+
+# Full gateway integration test
+make gateway-test
 ```
 
 ---

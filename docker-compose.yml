@@ -1,11 +1,25 @@
-# docker-compose.yml — microservices stack.
+# docker-compose.yml — microservices stack + Traefik API gateway
 #
-# Requires:  make datasource-up + make monitoring-up first
+# Requires:  make datasource-up + make platform-up first
 #
 # Start:     make services-up
 # Rebuild:   make services-rebuild
 # Stop:      make services-down
 # Logs:      make services-logs
+#
+# Gateway:   http://localhost/         (all API traffic)
+# Dashboard: http://localhost:8080/    (Traefik dashboard — dev only)
+#
+# Route map:
+#   /auth          → auth-svc:8082
+#   /internal      → auth-svc:8082   (service-account admin endpoints)
+#   /v1/accounts   → account-svc:8081
+#   /debug         → account-svc:8081
+#   /v1/audit      → audit-svc:8083
+#   /v1/notifications
+#   /v1/templates  → notification-svc:8084
+#   /v1/schedules
+#   /v1/payments   → payment-svc:8085
 
 networks:
   banking-net:
@@ -16,7 +30,30 @@ networks:
 services:
 
   # ──────────────────────────────────────────────────────────────────────────
+  # traefik — API gateway + reverse proxy (port 80 HTTP, port 8080 dashboard)
+  # ──────────────────────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.1
+    container_name: banking-traefik
+    restart: unless-stopped
+    networks:
+      - banking-net
+    ports:
+      - "80:80"       # public HTTP entrypoint
+      - "8080:8080"   # Traefik dashboard (dev only)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ──────────────────────────────────────────────────────────────────────────
   # auth-svc — RS256 JWT issuance (port 8082)
+  # Gateway routes: /auth  /internal
   # ──────────────────────────────────────────────────────────────────────────
   auth-svc:
     build:
@@ -45,9 +82,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # router: auth — handles /auth/* and /internal/*
+      - "traefik.http.routers.auth-svc.rule=PathPrefix(`/auth`) || PathPrefix(`/internal`)"
+      - "traefik.http.routers.auth-svc.entrypoints=web"
+      - "traefik.http.routers.auth-svc.priority=10"
+      - "traefik.http.services.auth-svc.loadbalancer.server.port=8082"
 
   # ──────────────────────────────────────────────────────────────────────────
   # account-svc — account management, JWT verification (port 8081)
+  # Gateway routes: /v1/accounts  /debug
   # ──────────────────────────────────────────────────────────────────────────
   account-svc:
     build:
@@ -80,9 +125,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # router: account-svc — handles /v1/accounts/* and /debug/*
+      - "traefik.http.routers.account-svc.rule=PathPrefix(`/v1/accounts`) || PathPrefix(`/debug`)"
+      - "traefik.http.routers.account-svc.entrypoints=web"
+      - "traefik.http.routers.account-svc.priority=10"
+      - "traefik.http.services.account-svc.loadbalancer.server.port=8081"
 
   # ──────────────────────────────────────────────────────────────────────────
   # notification-svc — centralised notification platform (port 8084)
+  # Gateway routes: /v1/notifications  /v1/templates  /v1/schedules
   # ──────────────────────────────────────────────────────────────────────────
   notification-svc:
     build:
@@ -110,9 +163,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # router: notification-svc — handles /v1/notifications /v1/templates /v1/schedules
+      - "traefik.http.routers.notification-svc.rule=PathPrefix(`/v1/notifications`) || PathPrefix(`/v1/templates`) || PathPrefix(`/v1/schedules`)"
+      - "traefik.http.routers.notification-svc.entrypoints=web"
+      - "traefik.http.routers.notification-svc.priority=10"
+      - "traefik.http.services.notification-svc.loadbalancer.server.port=8084"
 
   # ──────────────────────────────────────────────────────────────────────────
   # payment-svc — transaction orchestration (port 8085)
+  # Gateway routes: /v1/payments
   # ──────────────────────────────────────────────────────────────────────────
   payment-svc:
     build:
@@ -145,9 +206,17 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # router: payment-svc — handles /v1/payments/*
+      - "traefik.http.routers.payment-svc.rule=PathPrefix(`/v1/payments`)"
+      - "traefik.http.routers.payment-svc.entrypoints=web"
+      - "traefik.http.routers.payment-svc.priority=10"
+      - "traefik.http.services.payment-svc.loadbalancer.server.port=8085"
 
   # ──────────────────────────────────────────────────────────────────────────
   # audit-svc — NATS consumer + audit log query API (port 8083)
+  # Gateway routes: /v1/audit
   # ──────────────────────────────────────────────────────────────────────────
   audit-svc:
     build:
@@ -175,3 +244,10 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      # router: audit-svc — handles /v1/audit/*
+      - "traefik.http.routers.audit-svc.rule=PathPrefix(`/v1/audit`)"
+      - "traefik.http.routers.audit-svc.entrypoints=web"
+      - "traefik.http.routers.audit-svc.priority=10"
+      - "traefik.http.services.audit-svc.loadbalancer.server.port=8083"

@@ -1,0 +1,34 @@
+# traefik/traefik.yml — Traefik v3 static configuration
+#
+# Entrypoints:
+#   web       → :80   (all public API traffic)
+#   dashboard → :8080 (Traefik dashboard — dev only, insecure)
+#
+# Routing is handled entirely via Docker labels on each service container.
+# Dynamic config (middlewares, routers, services) lives in docker-compose.yml labels.
+
+api:
+  dashboard: true
+  insecure: true        # dashboard at http://localhost:8080 — disable in production
+
+entryPoints:
+  web:
+    address: ":80"
+
+providers:
+  docker:
+    exposedByDefault: false   # only containers with traefik.enable=true are routed
+    network: banking-net      # use this network for backend connections
+
+log:
+  level: INFO
+  format: json
+
+accessLog:
+  format: json
+  fields:
+    headers:
+      defaultMode: drop
+      names:
+        Authorization: redact    # never log auth tokens in plaintext
+        X-Api-Key: redact

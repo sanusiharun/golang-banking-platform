@@ -26,7 +26,7 @@ else
 endif
 .SHELLFLAGS := -c
 
-.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account migrate-audit tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress help
+.PHONY: build test test-integration lint gen-keys generate datasource-up datasource-down datasource-logs platform-up platform-down platform-logs monitoring-up monitoring-down monitoring-logs services-up services-down services-logs stack-up stack-down migrate migrate-auth migrate-account migrate-audit tidy fmt proto k6-up k6-down k6-smoke k6-load k6-stress gateway-test help
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
@@ -286,3 +286,7 @@ dev: ## Start account-svc with hot reload using Air (logs to ./logs/account-svc.
 
 # ─── Generate ─────────────────────────────────────────────────────────────────
 generate: proto ## Run all code generators
+
+# ─── Traefik gateway ──────────────────────────────────────────────────────────
+gateway-test: ## Run end-to-end gateway integration tests (requires make services-up)
+	bash scripts/test-gateway.sh
