@@ -1,37 +1,105 @@
-# traefik/dynamic.yml — HTTP routers and services (file provider)
+# traefik/dynamic.yml — HTTP routers, middlewares, and services (file provider)
 #
 # All backend URLs use Docker container names on banking-net.
 # Traefik reads this file directly — no Docker socket needed.
 # Changes to this file are hot-reloaded (watch: true in traefik.yml).
+#
+# Middleware stack applied per route:
+#   auth-svc          → secure-headers + rate-public  + circuit-breaker
+#   account-svc       → secure-headers + rate-internal + circuit-breaker + retry
+#   audit-svc         → secure-headers + rate-internal + circuit-breaker
+#   notification-svc  → secure-headers + rate-internal + circuit-breaker
+#   payment-svc       → secure-headers + rate-internal + circuit-breaker + retry
 
 http:
 
+  # ── Middlewares ─────────────────────────────────────────────────────────────
+
+  middlewares:
+
+    # Rate limit — public unauthenticated endpoints (login, refresh)
+    # Strict: 20 req/sec per IP, burst of 10
+    rate-public:
+      rateLimit:
+        average: 20
+        burst: 10
+
+    # Rate limit — authenticated internal endpoints
+    # Relaxed: 200 req/sec per IP, burst of 100
+    rate-internal:
+      rateLimit:
+        average: 200
+        burst: 100
+
+    # Circuit breaker — opens when >30% of responses in the last 10s are 5xx
+    # Prevents cascading failures: stops sending traffic to a sick backend
+    circuit-breaker:
+      circuitBreaker:
+        expression: "ResponseCodeRatio(500, 600, 0, 600) > 0.30"
+        checkPeriod: 10s
+        fallbackDuration: 30s  # how long the circuit stays open before half-open retry
+        recoveryDuration: 10s  # how long to stay in recovery before fully closing
+
+    # Retry — re-send failed requests up to 2 extra times
+    # Only attach to idempotent routes (GET, or POST with idempotency key)
+    retry:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+
+    # Security headers — applied to every response
+    # Hides server info, prevents clickjacking and XSS, enforces MIME sniffing protection
+    secure-headers:
+      headers:
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customResponseHeaders:
+          X-Powered-By: ""   # hide Go/Traefik from response headers
+          Server: ""
+
+  # ── Routers ─────────────────────────────────────────────────────────────────
+
   routers:
 
+    # auth-svc: public endpoints — strict rate limit, circuit breaker
+    # No retry: login/refresh are not safe to blindly retry (duplicate token issuance)
     auth-svc:
       rule: "PathPrefix(`/auth`) || PathPrefix(`/internal`)"
       entryPoints: [web]
+      middlewares: [secure-headers, rate-public, circuit-breaker]
       service: auth-svc
 
+    # account-svc: authenticated endpoints — relaxed rate limit, retry safe for reads
     account-svc:
       rule: "PathPrefix(`/v1/accounts`) || PathPrefix(`/debug`)"
       entryPoints: [web]
+      middlewares: [secure-headers, rate-internal, circuit-breaker, retry]
       service: account-svc
 
+    # audit-svc: authenticated endpoints — no retry (ingest POST must not duplicate)
     audit-svc:
       rule: "PathPrefix(`/v1/audit`)"
       entryPoints: [web]
+      middlewares: [secure-headers, rate-internal, circuit-breaker]
       service: audit-svc
 
+    # notification-svc: authenticated endpoints — no retry (send must not duplicate)
     notification-svc:
       rule: "PathPrefix(`/v1/notifications`) || PathPrefix(`/v1/templates`) || PathPrefix(`/v1/schedules`)"
       entryPoints: [web]
+      middlewares: [secure-headers, rate-internal, circuit-breaker]
       service: notification-svc
 
+    # payment-svc: retry safe — payment-svc uses Redis idempotency keys, so retries are safe
     payment-svc:
       rule: "PathPrefix(`/v1/payments`)"
       entryPoints: [web]
+      middlewares: [secure-headers, rate-internal, circuit-breaker, retry]
       service: payment-svc
+
+  # ── Services ─────────────────────────────────────────────────────────────────
 
   services:
 
@@ -39,23 +107,43 @@ http:
       loadBalancer:
         servers:
           - url: "http://banking-auth-svc:8082"
+        healthCheck:
+          path: /healthz/live
+          interval: 10s
+          timeout: 3s
 
     account-svc:
       loadBalancer:
         servers:
           - url: "http://banking-account-svc:8081"
+        healthCheck:
+          path: /healthz/live
+          interval: 10s
+          timeout: 3s
 
     audit-svc:
       loadBalancer:
         servers:
           - url: "http://banking-audit-svc:8083"
+        healthCheck:
+          path: /healthz/live
+          interval: 10s
+          timeout: 3s
 
     notification-svc:
       loadBalancer:
         servers:
           - url: "http://banking-notification-svc:8084"
+        healthCheck:
+          path: /healthz/live
+          interval: 10s
+          timeout: 3s
 
     payment-svc:
       loadBalancer:
         servers:
           - url: "http://banking-payment-svc:8085"
+        healthCheck:
+          path: /healthz/live
+          interval: 10s
+          timeout: 3s
