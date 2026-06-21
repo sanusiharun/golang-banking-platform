@@ -1,9 +1,7 @@
-package services_test
+package unit
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"errors"
 	"testing"
 	"time"
@@ -16,103 +14,6 @@ import (
 	"github.com/sanusi/banking/services/auth-svc/internal/services"
 )
 
-// ── Mock repositories ─────────────────────────────────────────────────────────
-
-type mockUserRepo struct {
-	user *dao.User
-	err  error
-	// For tracking calls in tests
-	findByUsernameCalls int
-	findByIDCalls       int
-}
-
-func (m *mockUserRepo) FindByUsername(_ context.Context, _ string) (*dao.User, error) {
-	m.findByUsernameCalls++
-	return m.user, m.err
-}
-
-func (m *mockUserRepo) FindByID(_ context.Context, _ string) (*dao.User, error) {
-	m.findByIDCalls++
-	return m.user, m.err
-}
-
-type mockTokenStore struct {
-	saveErr       error
-	findToken     *dao.RefreshToken
-	findErr       error
-	revokeErr     error
-	saveCalls     int
-	findCalls     int
-	revokeCalls   int
-	revokeAllCalls int
-}
-
-func (m *mockTokenStore) Save(_ context.Context, _ *dao.RefreshToken) error {
-	m.saveCalls++
-	return m.saveErr
-}
-
-func (m *mockTokenStore) FindByHash(_ context.Context, _ string) (*dao.RefreshToken, error) {
-	m.findCalls++
-	return m.findToken, m.findErr
-}
-
-func (m *mockTokenStore) Revoke(_ context.Context, _ string) error {
-	m.revokeCalls++
-	return m.revokeErr
-}
-
-func (m *mockTokenStore) RevokeAllForUser(_ context.Context, _ string) error {
-	m.revokeAllCalls++
-	return m.revokeErr
-}
-
-var _ repository.UserRepository = (*mockUserRepo)(nil)
-var _ repository.TokenStore = (*mockTokenStore)(nil)
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-func newTestRSAKey(t *testing.T) *rsa.PrivateKey {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("generate RSA key: %v", err)
-	}
-	return key
-}
-
-func hashPassword(t *testing.T, password string) string {
-	t.Helper()
-	h, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
-	if err != nil {
-		t.Fatalf("bcrypt: %v", err)
-	}
-	return string(h)
-}
-
-func newTestService(t *testing.T, userRepo repository.UserRepository, tokenStore repository.TokenStore) services.AuthService {
-	t.Helper()
-	key := newTestRSAKey(t)
-	return services.NewAuthService(userRepo, tokenStore, services.AuthConfig{
-		PrivateKey:      key,
-		Issuer:          "test",
-		AccessTokenTTL:  15 * time.Minute,
-		RefreshTokenTTL: 24 * time.Hour,
-		BCryptCost:      bcrypt.MinCost,
-	})
-}
-
-func newTestServiceWithConfig(t *testing.T, userRepo repository.UserRepository, tokenStore repository.TokenStore, cfg services.AuthConfig) services.AuthService {
-	t.Helper()
-	if cfg.PrivateKey == nil {
-		cfg.PrivateKey = newTestRSAKey(t)
-	}
-	if cfg.Issuer == "" {
-		cfg.Issuer = "test"
-	}
-	return services.NewAuthService(userRepo, tokenStore, cfg)
-}
-
 // ── Login Tests ────────────────────────────────────────────────────────────────
 
 func TestLogin_Success(t *testing.T) {
@@ -121,14 +22,14 @@ func TestLogin_Success(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		Roles:        dao.StringArray{"ADMIN"},
 		IsActive:     true,
 	}
 
-	userRepo := &mockUserRepo{user: user}
-	tokenStore := &mockTokenStore{}
-	svc := newTestService(t, userRepo, tokenStore)
+	userRepo := &MockUserRepo{User: user}
+	tokenStore := &MockTokenStore{}
+	svc := NewTestAuthService(t, userRepo, tokenStore)
 
 	resp, err := svc.Login(context.Background(), &dto.LoginRequest{
 		Username: "admin",
@@ -147,11 +48,11 @@ func TestLogin_Success(t *testing.T) {
 	if resp.UserID != user.ID {
 		t.Errorf("expected user ID %q, got %q", user.ID, resp.UserID)
 	}
-	if userRepo.findByUsernameCalls != 1 {
-		t.Errorf("expected 1 FindByUsername call, got %d", userRepo.findByUsernameCalls)
+	if userRepo.FindByUsernameCalls != 1 {
+		t.Errorf("expected 1 FindByUsername call, got %d", userRepo.FindByUsernameCalls)
 	}
-	if tokenStore.saveCalls != 1 {
-		t.Errorf("expected 1 Save call, got %d", tokenStore.saveCalls)
+	if tokenStore.SaveCalls != 1 {
+		t.Errorf("expected 1 Save call, got %d", tokenStore.SaveCalls)
 	}
 }
 
@@ -159,11 +60,11 @@ func TestLogin_WrongPassword(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, "correct-password"),
+		PasswordHash: HashPassword(t, "correct-password"),
 		IsActive:     true,
 	}
 
-	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
+	svc := NewTestAuthService(t, &MockUserRepo{User: user}, &MockTokenStore{})
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
 		Username: "admin",
@@ -176,8 +77,8 @@ func TestLogin_WrongPassword(t *testing.T) {
 }
 
 func TestLogin_UserNotFound(t *testing.T) {
-	userRepo := &mockUserRepo{err: repository.ErrUserNotFound}
-	svc := newTestService(t, userRepo, &mockTokenStore{})
+	userRepo := &MockUserRepo{Err: repository.ErrUserNotFound}
+	svc := NewTestAuthService(t, userRepo, &MockTokenStore{})
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
 		Username: "nobody",
@@ -187,8 +88,8 @@ func TestLogin_UserNotFound(t *testing.T) {
 	if !errors.Is(err, services.ErrInvalidCredentials) {
 		t.Errorf("expected ErrInvalidCredentials, got %v", err)
 	}
-	if userRepo.findByUsernameCalls != 1 {
-		t.Errorf("expected 1 FindByUsername call, got %d", userRepo.findByUsernameCalls)
+	if userRepo.FindByUsernameCalls != 1 {
+		t.Errorf("expected 1 FindByUsername call, got %d", userRepo.FindByUsernameCalls)
 	}
 }
 
@@ -196,11 +97,11 @@ func TestLogin_InactiveUser(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-002",
 		Username:     "inactive",
-		PasswordHash: hashPassword(t, "password"),
+		PasswordHash: HashPassword(t, "password"),
 		IsActive:     false,
 	}
 
-	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
+	svc := NewTestAuthService(t, &MockUserRepo{User: user}, &MockTokenStore{})
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
 		Username: "inactive",
@@ -216,13 +117,13 @@ func TestLogin_TokenStoreSaveError(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, "pass"),
+		PasswordHash: HashPassword(t, "pass"),
 		IsActive:     true,
 	}
 
-	svc := newTestService(t,
-		&mockUserRepo{user: user},
-		&mockTokenStore{saveErr: errors.New("db error")},
+	svc := NewTestAuthService(t,
+		&MockUserRepo{User: user},
+		&MockTokenStore{SaveErr: errors.New("db error")},
 	)
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
@@ -240,9 +141,9 @@ func TestLogin_TokenStoreSaveError(t *testing.T) {
 
 func TestLogin_UserRepositoryLookupError(t *testing.T) {
 	lookupErr := errors.New("db connection failed")
-	svc := newTestService(t,
-		&mockUserRepo{err: lookupErr},
-		&mockTokenStore{},
+	svc := NewTestAuthService(t,
+		&MockUserRepo{Err: lookupErr},
+		&MockTokenStore{},
 	)
 
 	_, err := svc.Login(context.Background(), &dto.LoginRequest{
@@ -262,14 +163,14 @@ func TestLogin_BCryptCostDefault(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, "password"),
+		PasswordHash: HashPassword(t, "password"),
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
+	key := NewTestRSAKey(t)
 	svc := services.NewAuthService(
-		&mockUserRepo{user: user},
-		&mockTokenStore{},
+		&MockUserRepo{User: user},
+		&MockTokenStore{},
 		services.AuthConfig{
 			PrivateKey:      key,
 			Issuer:          "test",
@@ -311,9 +212,9 @@ func TestRefresh_Success(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	userRepo := &mockUserRepo{user: user}
-	tokenStore := &mockTokenStore{findToken: refreshToken}
-	svc := newTestService(t, userRepo, tokenStore)
+	userRepo := &MockUserRepo{User: user}
+	tokenStore := &MockTokenStore{FindToken: refreshToken}
+	svc := NewTestAuthService(t, userRepo, tokenStore)
 
 	resp, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test-token",
@@ -328,20 +229,20 @@ func TestRefresh_Success(t *testing.T) {
 	if resp.RefreshToken == "" {
 		t.Error("expected non-empty refresh token")
 	}
-	if userRepo.findByIDCalls != 1 {
-		t.Errorf("expected 1 FindByID call, got %d", userRepo.findByIDCalls)
+	if userRepo.FindByIDCalls != 1 {
+		t.Errorf("expected 1 FindByID call, got %d", userRepo.FindByIDCalls)
 	}
-	if tokenStore.findCalls != 1 {
-		t.Errorf("expected 1 Find call, got %d", tokenStore.findCalls)
+	if tokenStore.FindCalls != 1 {
+		t.Errorf("expected 1 Find call, got %d", tokenStore.FindCalls)
 	}
-	if tokenStore.revokeCalls != 1 {
-		t.Errorf("expected 1 Revoke call (for old token), got %d", tokenStore.revokeCalls)
+	if tokenStore.RevokeCalls != 1 {
+		t.Errorf("expected 1 Revoke call (for old token), got %d", tokenStore.RevokeCalls)
 	}
 }
 
 func TestRefresh_TokenNotFound(t *testing.T) {
-	tokenStore := &mockTokenStore{findErr: repository.ErrTokenNotFound}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{FindErr: repository.ErrTokenNotFound}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "invalid",
@@ -353,8 +254,8 @@ func TestRefresh_TokenNotFound(t *testing.T) {
 }
 
 func TestRefresh_TokenRevoked(t *testing.T) {
-	tokenStore := &mockTokenStore{findErr: repository.ErrTokenRevoked}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{FindErr: repository.ErrTokenRevoked}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "revoked",
@@ -366,8 +267,8 @@ func TestRefresh_TokenRevoked(t *testing.T) {
 }
 
 func TestRefresh_TokenExpired(t *testing.T) {
-	tokenStore := &mockTokenStore{findErr: repository.ErrTokenExpired}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{FindErr: repository.ErrTokenExpired}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "expired",
@@ -380,8 +281,8 @@ func TestRefresh_TokenExpired(t *testing.T) {
 
 func TestRefresh_TokenStoreError(t *testing.T) {
 	lookupErr := errors.New("db connection failed")
-	tokenStore := &mockTokenStore{findErr: lookupErr}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{FindErr: lookupErr}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test",
@@ -405,11 +306,11 @@ func TestRefresh_RevokeOldTokenError(t *testing.T) {
 	}
 
 	revokeErr := errors.New("revoke failed")
-	tokenStore := &mockTokenStore{
-		findToken: refreshToken,
-		revokeErr: revokeErr,
+	tokenStore := &MockTokenStore{
+		FindToken: refreshToken,
+		RevokeErr: revokeErr,
 	}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test-token",
@@ -429,9 +330,9 @@ func TestRefresh_UserNotFound(t *testing.T) {
 		CreatedAt: time.Now(),
 	}
 
-	userRepo := &mockUserRepo{err: repository.ErrUserNotFound}
-	tokenStore := &mockTokenStore{findToken: refreshToken}
-	svc := newTestService(t, userRepo, tokenStore)
+	userRepo := &MockUserRepo{Err: repository.ErrUserNotFound}
+	tokenStore := &MockTokenStore{FindToken: refreshToken}
+	svc := NewTestAuthService(t, userRepo, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test-token",
@@ -452,9 +353,9 @@ func TestRefresh_UserRepositoryError(t *testing.T) {
 	}
 
 	reloadErr := errors.New("db error")
-	userRepo := &mockUserRepo{err: reloadErr}
-	tokenStore := &mockTokenStore{findToken: refreshToken}
-	svc := newTestService(t, userRepo, tokenStore)
+	userRepo := &MockUserRepo{Err: reloadErr}
+	tokenStore := &MockTokenStore{FindToken: refreshToken}
+	svc := NewTestAuthService(t, userRepo, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test-token",
@@ -483,12 +384,12 @@ func TestRefresh_TokenSaveError(t *testing.T) {
 	}
 
 	saveErr := errors.New("save failed")
-	userRepo := &mockUserRepo{user: user}
-	tokenStore := &mockTokenStore{
-		findToken: refreshToken,
-		saveErr:   saveErr,
+	userRepo := &MockUserRepo{User: user}
+	tokenStore := &MockTokenStore{
+		FindToken: refreshToken,
+		SaveErr:   saveErr,
 	}
-	svc := newTestService(t, userRepo, tokenStore)
+	svc := NewTestAuthService(t, userRepo, tokenStore)
 
 	_, err := svc.Refresh(context.Background(), &dto.RefreshRequest{
 		RefreshToken: "test-token",
@@ -502,8 +403,8 @@ func TestRefresh_TokenSaveError(t *testing.T) {
 // ── Logout Tests ───────────────────────────────────────────────────────────────
 
 func TestLogout_Success(t *testing.T) {
-	tokenStore := &mockTokenStore{}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	err := svc.Logout(context.Background(), &dto.LogoutRequest{
 		RefreshToken: "test-token",
@@ -512,15 +413,15 @@ func TestLogout_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if tokenStore.revokeCalls != 1 {
-		t.Errorf("expected 1 Revoke call, got %d", tokenStore.revokeCalls)
+	if tokenStore.RevokeCalls != 1 {
+		t.Errorf("expected 1 Revoke call, got %d", tokenStore.RevokeCalls)
 	}
 }
 
 func TestLogout_RevokeError(t *testing.T) {
 	revokeErr := errors.New("revoke failed")
-	tokenStore := &mockTokenStore{revokeErr: revokeErr}
-	svc := newTestService(t, &mockUserRepo{}, tokenStore)
+	tokenStore := &MockTokenStore{RevokeErr: revokeErr}
+	svc := NewTestAuthService(t, &MockUserRepo{}, tokenStore)
 
 	err := svc.Logout(context.Background(), &dto.LogoutRequest{
 		RefreshToken: "test-token",
@@ -544,13 +445,13 @@ func TestIssueTokenPair_WithSubjectEncryption(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		Roles:        dao.StringArray{"ADMIN"},
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
-	svc := newTestServiceWithConfig(t, &mockUserRepo{user: user}, &mockTokenStore{}, services.AuthConfig{
+	key := NewTestRSAKey(t)
+	svc := NewTestAuthServiceWithConfig(t, &MockUserRepo{User: user}, &MockTokenStore{}, services.AuthConfig{
 		PrivateKey:           key,
 		Issuer:               "test",
 		AccessTokenTTL:       15 * time.Minute,
@@ -578,12 +479,12 @@ func TestIssueTokenPair_AccessTokenTTLDefault(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
-	svc := newTestServiceWithConfig(t, &mockUserRepo{user: user}, &mockTokenStore{}, services.AuthConfig{
+	key := NewTestRSAKey(t)
+	svc := NewTestAuthServiceWithConfig(t, &MockUserRepo{User: user}, &MockTokenStore{}, services.AuthConfig{
 		PrivateKey:      key,
 		Issuer:          "test",
 		AccessTokenTTL:  0, // Should default to 15 minutes
@@ -614,12 +515,12 @@ func TestIssueTokenPair_RefreshTokenTTLDefault(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
-	svc := newTestServiceWithConfig(t, &mockUserRepo{user: user}, &mockTokenStore{}, services.AuthConfig{
+	key := NewTestRSAKey(t)
+	svc := NewTestAuthServiceWithConfig(t, &MockUserRepo{User: user}, &MockTokenStore{}, services.AuthConfig{
 		PrivateKey:      key,
 		Issuer:          "test",
 		AccessTokenTTL:  15 * time.Minute,
@@ -649,12 +550,12 @@ func TestIssueTokenPair_SubjectEncryptionError(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
-	svc := newTestServiceWithConfig(t, &mockUserRepo{user: user}, &mockTokenStore{}, services.AuthConfig{
+	key := NewTestRSAKey(t)
+	svc := NewTestAuthServiceWithConfig(t, &MockUserRepo{User: user}, &MockTokenStore{}, services.AuthConfig{
 		PrivateKey:           key,
 		Issuer:               "test",
 		AccessTokenTTL:       15 * time.Minute,
@@ -679,12 +580,12 @@ func TestIssueTokenPair_ResponseFieldsSet(t *testing.T) {
 		ID:           "usr-001",
 		TenantID:     "tenant-1",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, password),
+		PasswordHash: HashPassword(t, password),
 		Roles:        dao.StringArray{"USER", "ADMIN"},
 		IsActive:     true,
 	}
 
-	svc := newTestService(t, &mockUserRepo{user: user}, &mockTokenStore{})
+	svc := NewTestAuthService(t, &MockUserRepo{User: user}, &MockTokenStore{})
 
 	resp, err := svc.Login(context.Background(), &dto.LoginRequest{
 		Username: "admin",
@@ -716,15 +617,15 @@ func TestNewAuthService_WithNegativeBCryptCost(t *testing.T) {
 	user := &dao.User{
 		ID:           "usr-001",
 		Username:     "admin",
-		PasswordHash: hashPassword(t, "pass"),
+		PasswordHash: HashPassword(t, "pass"),
 		IsActive:     true,
 	}
 
-	key := newTestRSAKey(t)
+	key := NewTestRSAKey(t)
 	// With BCryptCost < 0, should use bcrypt.DefaultCost
 	svc := services.NewAuthService(
-		&mockUserRepo{user: user},
-		&mockTokenStore{},
+		&MockUserRepo{User: user},
+		&MockTokenStore{},
 		services.AuthConfig{
 			PrivateKey:      key,
 			Issuer:          "test",
