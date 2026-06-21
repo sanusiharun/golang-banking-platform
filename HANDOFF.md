@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-20 (Traefik gateway integration)
+> Last updated: 2026-06-21 (Testing standards + unit tests for auth-svc)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -228,6 +228,63 @@ environment:
   - `skills/backend-delivery-framework.md` — documentation lifecycle, traceability rules, delivery workflow, engineering governance
   - `skills/microservice-standards.md` — folder structure, layering, naming, error handling, testing standards
   - `skills/monitoring-observability-standards.md` — logging, metrics, tracing, alerting, SLO, health checks, operational readiness checklist
+
+---
+
+## Testing Standards (2026-06-21)
+
+All unit tests now follow a standardized structure defined in **TESTING_STANDARDS.md**.
+
+### Structure
+
+Each service organizes tests in a dedicated `tests/` folder:
+
+```
+service-name/
+├── internal/          (production code)
+├── migrations/        (SQL migrations)
+├── tests/
+│   ├── unit/          (unit tests in `package unit`)
+│   │   ├── mocks.go             (all mock implementations)
+│   │   ├── helpers.go           (reusable test utilities)
+│   │   ├── auth_service_test.go
+│   │   └── apikey_service_test.go
+│   └── integration/   (future: integration tests)
+└── Makefile
+```
+
+### Run Tests
+
+```bash
+# Run all unit tests for a service
+go test ./services/auth-svc/tests/unit
+
+# With coverage
+go test -cover ./services/auth-svc/tests/unit
+
+# Specific test
+go test -run TestLogin_Success ./services/auth-svc/tests/unit
+```
+
+### Coverage Targets
+
+| Type | Target |
+|------|--------|
+| Service logic | 90%+ |
+| Repositories (mocked) | 85%+ |
+| Handlers | 80%+ |
+| DTOs/DAOs | 0% (acceptable) |
+
+### Implemented
+
+✅ **auth-svc** — 24 unit tests covering Login/Refresh/Logout/TokenIssuance with 80.6% coverage (external package)
+
+### TODO
+
+- [ ] **account-svc** — migrate existing tests to `tests/unit/` structure
+- [ ] **audit-svc** — write unit tests from scratch
+- [ ] **payment-svc** — write unit tests from scratch
+- [ ] **Integration tests** — scaffold in `tests/integration/`
 
 ---
 
