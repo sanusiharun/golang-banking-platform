@@ -51,7 +51,7 @@ func (h *NotificationHandler) Send(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Send(ctx, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -66,7 +66,7 @@ func (h *NotificationHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetByID(ctx, id)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -101,7 +101,7 @@ func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.List(ctx, filter)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -116,7 +116,7 @@ func (h *NotificationHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Retry(ctx, id)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -131,7 +131,7 @@ func (h *NotificationHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Cancel(ctx, id)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)

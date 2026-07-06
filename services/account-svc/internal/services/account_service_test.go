@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	pkgerrors "github.com/sanusi/banking/pkg/errors"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dao"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/account-svc/internal/repository"
@@ -14,13 +15,13 @@ import (
 // ── Mock repository ───────────────────────────────────────────────────────────
 
 type mockAccountRepo struct {
-	account    *dao.Account
-	accounts   []*dao.Account
-	total      int64
-	createErr  error
-	getErr     error
-	updateErr  error
-	listErr    error
+	account   *dao.Account
+	accounts  []*dao.Account
+	total     int64
+	createErr error
+	getErr    error
+	updateErr error
+	listErr   error
 }
 
 func (m *mockAccountRepo) Create(_ context.Context, account *dao.Account) error {
@@ -121,7 +122,7 @@ func TestGetAccount_NotFound(t *testing.T) {
 	svc := services.NewAccountService(repo)
 
 	_, err := svc.GetAccount(context.Background(), "nonexistent")
-	if !errors.Is(err, repository.ErrNotFound) {
+	if !pkgerrors.IsNotFound(err) {
 		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -152,8 +153,8 @@ func TestCredit_InactiveAccount(t *testing.T) {
 	svc := services.NewAccountService(repo)
 
 	_, err := svc.Credit(context.Background(), "acc-001", &dto.CreditRequest{Amount: 500})
-	if !errors.Is(err, repository.ErrAccountNotActive) {
-		t.Errorf("expected ErrAccountNotActive, got %v", err)
+	if !pkgerrors.IsValidation(err) {
+		t.Errorf("expected validation error (account not active), got %v", err)
 	}
 }
 
@@ -181,8 +182,8 @@ func TestDebit_InsufficientFunds(t *testing.T) {
 	svc := services.NewAccountService(repo)
 
 	_, err := svc.Debit(context.Background(), "acc-001", &dto.DebitRequest{Amount: 500})
-	if !errors.Is(err, repository.ErrInsufficientFunds) {
-		t.Errorf("expected ErrInsufficientFunds, got %v", err)
+	if !pkgerrors.IsValidation(err) {
+		t.Errorf("expected validation error (insufficient funds), got %v", err)
 	}
 }
 
@@ -193,8 +194,8 @@ func TestDebit_InactiveAccount(t *testing.T) {
 	svc := services.NewAccountService(repo)
 
 	_, err := svc.Debit(context.Background(), "acc-001", &dto.DebitRequest{Amount: 100})
-	if !errors.Is(err, repository.ErrAccountNotActive) {
-		t.Errorf("expected ErrAccountNotActive, got %v", err)
+	if !pkgerrors.IsValidation(err) {
+		t.Errorf("expected validation error (account not active), got %v", err)
 	}
 }
 
@@ -203,7 +204,7 @@ func TestDebit_ZeroBalance(t *testing.T) {
 	svc := services.NewAccountService(repo)
 
 	_, err := svc.Debit(context.Background(), "acc-001", &dto.DebitRequest{Amount: 1})
-	if !errors.Is(err, repository.ErrInsufficientFunds) {
-		t.Errorf("expected ErrInsufficientFunds, got %v", err)
+	if !pkgerrors.IsValidation(err) {
+		t.Errorf("expected validation error (insufficient funds), got %v", err)
 	}
 }

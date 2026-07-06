@@ -180,6 +180,12 @@ func mapDomainError(err error) *HTTPError {
 			Code:       "PRECONDITION_FAILED",
 			Message:    err.Error(),
 		}
+	case pkgerrors.IsRateLimited(err):
+		return &HTTPError{
+			StatusCode: http.StatusTooManyRequests,
+			Code:       "RATE_LIMITED",
+			Message:    err.Error(),
+		}
 	default:
 		return &HTTPError{
 			StatusCode: http.StatusInternalServerError,

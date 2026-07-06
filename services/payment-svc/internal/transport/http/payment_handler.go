@@ -46,7 +46,7 @@ func (h *PaymentHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.InitiateTransfer(r.Context(), idempKey, &req, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -73,7 +73,7 @@ func (h *PaymentHandler) MerchantPayment(w http.ResponseWriter, r *http.Request)
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.InitiateMerchantPayment(r.Context(), idempKey, &req, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -100,7 +100,7 @@ func (h *PaymentHandler) Fee(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.InitiateFee(r.Context(), idempKey, &req, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -127,7 +127,7 @@ func (h *PaymentHandler) Refund(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.InitiateRefund(r.Context(), idempKey, &req, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -139,7 +139,7 @@ func (h *PaymentHandler) Reverse(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.Reverse(r.Context(), id, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -151,7 +151,7 @@ func (h *PaymentHandler) Cancel(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.Cancel(r.Context(), id, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -163,7 +163,7 @@ func (h *PaymentHandler) Retry(w http.ResponseWriter, r *http.Request) {
 	initiatedBy := pkgmiddleware.UserIDFromContext(r.Context())
 	resp, err := h.svc.Retry(r.Context(), id, initiatedBy)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)

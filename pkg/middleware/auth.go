@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	pkgcrypto "github.com/sanusi/banking/pkg/crypto"
+	"github.com/sanusi/banking/pkg/httpx"
 )
 
 type claimsKey struct{}
@@ -46,7 +47,7 @@ func Authenticate(cfg JWTConfig) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr := extractBearer(r)
 			if tokenStr == "" {
-				writeAuthError(w, "UNAUTHORIZED", "missing authorization header", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "missing authorization header"))
 				return
 			}
 
@@ -65,7 +66,7 @@ func Authenticate(cfg JWTConfig) func(http.Handler) http.Handler {
 					slog.String("error", err.Error()),
 					slog.String("request_id", RequestIDFromContext(r.Context())),
 				)
-				writeAuthError(w, "UNAUTHORIZED", "invalid or expired token", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired token"))
 				return
 			}
 
@@ -77,7 +78,7 @@ func Authenticate(cfg JWTConfig) func(http.Handler) http.Handler {
 					slog.WarnContext(r.Context(), "failed to decrypt token subject",
 						slog.String("error", err.Error()),
 					)
-					writeAuthError(w, "UNAUTHORIZED", "invalid token subject", http.StatusUnauthorized)
+					httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "invalid token subject"))
 					return
 				}
 				claims.UserID = userID
@@ -102,7 +103,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := ClaimsFromContext(r.Context())
 			if !ok {
-				writeAuthError(w, "UNAUTHORIZED", "no auth context", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "no auth context"))
 				return
 			}
 			for _, role := range claims.Roles {
@@ -116,7 +117,7 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 				slog.Any("user_roles", claims.Roles),
 				slog.Any("required_roles", roles),
 			)
-			writeAuthError(w, "FORBIDDEN", "insufficient role", http.StatusForbidden)
+			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusForbidden, "FORBIDDEN", "insufficient role"))
 		})
 	}
 }
@@ -150,8 +151,3 @@ func extractBearer(r *http.Request) string {
 	return strings.TrimSpace(parts[1])
 }
 
-func writeAuthError(w http.ResponseWriter, code, msg string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`{"success":false,"error":{"code":"` + code + `","message":"` + msg + `"}}`))
-}

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	pkgerrors "github.com/sanusi/banking/pkg/errors"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dao"
 	"github.com/sanusi/banking/services/account-svc/internal/domain/dto"
@@ -63,6 +65,9 @@ func (s *accountService) CreateAccount(ctx context.Context, req *dto.CreateAccou
 	}
 
 	if err = s.repo.Create(ctx, account); err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, pkgerrors.Conflict("account", "iban", account.IBAN)
+		}
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 
@@ -81,7 +86,10 @@ func (s *accountService) GetAccount(ctx context.Context, id string) (res *dto.Ac
 
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, pkgerrors.NotFound("account", id)
+		}
+		return nil, fmt.Errorf("get account: %w", err)
 	}
 	return toAccountResponse(account), nil
 }
@@ -94,7 +102,10 @@ func (s *accountService) GetBalance(ctx context.Context, id string) (res *dto.Ba
 
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, pkgerrors.NotFound("account", id)
+		}
+		return nil, fmt.Errorf("get balance: %w", err)
 	}
 	return &dto.BalanceResponse{
 		AccountID: account.ID,
@@ -113,20 +124,24 @@ func (s *accountService) Credit(ctx context.Context, id string, req *dto.CreditR
 
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, pkgerrors.NotFound("account", id)
+		}
+		return nil, fmt.Errorf("credit get account: %w", err)
 	}
 	if account.Status != "ACTIVE" {
-		err = repository.ErrAccountNotActive
-		return nil, err
+		return nil, pkgerrors.Validation("status", "account is not active")
 	}
 	if account.Balance > math.MaxInt64-req.Amount {
-		err = fmt.Errorf("credit would overflow balance")
-		return nil, err
+		return nil, pkgerrors.Validation("amount", "credit would overflow balance")
 	}
 
 	account.Balance += req.Amount
 
 	if err = s.repo.Update(ctx, account); err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, pkgerrors.PreconditionFailed("account", "concurrent modification detected, please retry")
+		}
 		return nil, fmt.Errorf("credit update: %w", err)
 	}
 
@@ -147,20 +162,24 @@ func (s *accountService) Debit(ctx context.Context, id string, req *dto.DebitReq
 
 	account, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, pkgerrors.NotFound("account", id)
+		}
+		return nil, fmt.Errorf("debit get account: %w", err)
 	}
 	if account.Status != "ACTIVE" {
-		err = repository.ErrAccountNotActive
-		return nil, err
+		return nil, pkgerrors.Validation("status", "account is not active")
 	}
 	if account.Balance < req.Amount {
-		err = repository.ErrInsufficientFunds
-		return nil, err
+		return nil, pkgerrors.Validation("amount", "insufficient funds")
 	}
 
 	account.Balance -= req.Amount
 
 	if err = s.repo.Update(ctx, account); err != nil {
+		if errors.Is(err, repository.ErrConflict) {
+			return nil, pkgerrors.PreconditionFailed("account", "concurrent modification detected, please retry")
+		}
 		return nil, fmt.Errorf("debit update: %w", err)
 	}
 

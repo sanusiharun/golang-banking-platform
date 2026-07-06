@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-06-21 (Testing standards + unit tests for auth-svc)
+> Last updated: 2026-07-06 (Error handling unification + dead infra cleanup)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -176,9 +176,15 @@ environment:
 
 ### pkg/
 - `pkg/audit` — `Publisher` interface, `NATSPublisher`, `NoopPublisher`, `HTTPPublisher`
-- `pkg/httpx` — canonical response helpers (all services use this, no local duplicates)
-- `pkg/middleware` — JWT auth, `AuthenticateAny`, `RequireRole`, rate limit, tracing, metrics
+- `pkg/httpx` — canonical response helpers (all services use this, no local duplicates); `mapDomainError` handles all pkg/errors types including 429 RateLimited
+- `pkg/middleware` — JWT auth, `AuthenticateAny`, `RequireRole`, rate limit, tracing, metrics; all error responses now via `httpx.WriteHTTPError` (no raw JSON)
 - `pkg/errors`, `pkg/observability`, `pkg/featureflag`, `pkg/idempotency`
+
+### Error handling (unified 2026-07-06)
+All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` helpers anywhere.
+- Service layer wraps repository sentinel errors → `pkg/errors` domain types before returning
+- Transport layer calls `httpx.WriteError` only; `httpx.WriteHTTPError` for domain-specific codes
+- account-svc: `ErrAccountNotActive` → `pkgerrors.Validation`, `ErrInsufficientFunds` → `pkgerrors.Validation`, `ErrConflict` on Update → `pkgerrors.PreconditionFailed`
 
 ### Observability
 - Prometheus scrapes all three services via `host.docker.internal:808x`

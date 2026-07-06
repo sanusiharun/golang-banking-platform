@@ -26,7 +26,7 @@ func (h *InquiryHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	resp, err := h.svc.GetByID(r.Context(), id)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -48,7 +48,7 @@ func (h *InquiryHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.svc.List(r.Context(), filter)
 	if err != nil {
-		writePaymentError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)

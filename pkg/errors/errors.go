@@ -190,3 +190,9 @@ func IsPreconditionFailed(err error) bool {
 	var e *ErrPreconditionFailed
 	return errors.As(err, &e)
 }
+
+// IsRateLimited reports whether err is an ErrRateLimited.
+func IsRateLimited(err error) bool {
+	var e *ErrRateLimited
+	return errors.As(err, &e)
+}

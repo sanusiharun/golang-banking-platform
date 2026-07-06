@@ -3,34 +3,9 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
   postgres_data:
-  mongo_data:
 
 services:
-
-  # ── MySQL 8.0 ──────────────────────────────────────────────────────────────
-  mysql:
-    image: mysql:8.0
-    container_name: ds_mysql
-    restart: unless-stopped
-    ports:
-      - "3306:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE:      ${MYSQL_DATABASE}
-      MYSQL_USER:          ${MYSQL_USER}
-      MYSQL_PASSWORD:      ${MYSQL_PASSWORD}
-    volumes:
-      - mysql_data:/var/lib/mysql
-    networks:
-      - datasource_net
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "--silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   # ── PostgreSQL 16 ──────────────────────────────────────────────────────────
   postgres:
@@ -54,54 +29,3 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
-
-  # ── MongoDB 8 (replica set rs0 — required for transactions) ──────────────
-  mongodb:
-    image: mongo:8
-    container_name: ds_mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    entrypoint:
-      - /bin/bash
-      - -c
-      - "cp /tmp/keyfile-src /tmp/keyfile && chmod 400 /tmp/keyfile && chown 999:999 /tmp/keyfile && exec /usr/local/bin/docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /tmp/keyfile"
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE:      ${MONGO_DATABASE}
-    volumes:
-      - mongo_data:/data/db
-      - ./mongo/keyfile:/tmp/keyfile-src:ro
-    networks:
-      - datasource_net
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  # ── MongoDB Replica Set Init (runs once, then exits) ──────────────────────
-  mongo-init:
-    image: mongo:8
-    container_name: ds_mongodb_init
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    networks:
-      - datasource_net
-    restart: "no"
-    entrypoint:
-      - mongosh
-      - --host
-      - ds_mongodb:27017
-      - -u
-      - ${MONGO_ROOT_USERNAME}
-      - -p
-      - ${MONGO_ROOT_PASSWORD}
-      - --authenticationDatabase
-      - admin
-      - --quiet
-      - --eval
-      - "try { rs.status() } catch(e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'ds_mongodb:27017'}]}) }"

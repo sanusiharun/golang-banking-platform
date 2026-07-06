@@ -66,7 +66,7 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.CreateAccount(ctx, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetAccount(ctx, chi.URLParam(r, "id"))
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -131,7 +131,7 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetBalance(ctx, accountID)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -179,7 +179,7 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Credit(ctx, accountID, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -228,7 +228,7 @@ func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Debit(ctx, accountID, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 
@@ -261,7 +261,7 @@ func (h *AccountHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.ListAccounts(ctx, customerID, page, pageSize)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeAccountError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)

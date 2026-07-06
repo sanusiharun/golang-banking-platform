@@ -48,7 +48,7 @@ func (h *ScheduleHandler) Create(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Create(ctx, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -62,7 +62,7 @@ func (h *ScheduleHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetByID(ctx, chi.URLParam(r, "id"))
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -104,7 +104,7 @@ func (h *ScheduleHandler) List(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.List(ctx, filter)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -125,7 +125,7 @@ func (h *ScheduleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Update(ctx, chi.URLParam(r, "id"), &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -138,7 +138,7 @@ func (h *ScheduleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.Delete(ctx, chi.URLParam(r, "id")); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteNoContent(w)
@@ -152,7 +152,7 @@ func (h *ScheduleHandler) Enable(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Enable(ctx, chi.URLParam(r, "id"))
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -166,7 +166,7 @@ func (h *ScheduleHandler) Disable(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Disable(ctx, chi.URLParam(r, "id"))
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)

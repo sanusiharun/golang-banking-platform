@@ -1,5 +1,10 @@
 # Golang Banking Platform — CLAUDE.md
 
+## Self-learning
+when i correct you, or you catch yourself making a mistake: before continuing, add the lesson as a one-line rule under ## Lessons, so it never happens again.
+
+## Lesson
+
 > Coding rules and conventions only. Full project context, setup, ports, and next steps are in **HANDOFF.md**.
 
 ---

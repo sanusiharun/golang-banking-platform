@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/sanusi/banking/pkg/httpx"
 )
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -100,13 +102,13 @@ func AuthenticateAPIKey(cfg APIKeyConfig) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawKey := extractAPIKey(r)
 			if rawKey == "" {
-				writeAuthError(w, "UNAUTHORIZED", "missing api key", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "missing api key"))
 				return
 			}
 
 			// Reject test keys in production and vice versa.
 			if !validKeyPrefix(rawKey, cfg.Environment) {
-				writeAuthError(w, "UNAUTHORIZED", "invalid api key prefix for this environment", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "invalid api key prefix for this environment"))
 				return
 			}
 
@@ -117,7 +119,7 @@ func AuthenticateAPIKey(cfg APIKeyConfig) func(http.Handler) http.Handler {
 					slog.String("error", err.Error()),
 					slog.String("request_id", RequestIDFromContext(r.Context())),
 				)
-				writeAuthError(w, "UNAUTHORIZED", "invalid or expired api key", http.StatusUnauthorized)
+				httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "invalid or expired api key"))
 				return
 			}
 
@@ -175,7 +177,7 @@ func AuthenticateAny(jwtCfg JWTConfig, apiKeyCfg APIKeyConfig) func(http.Handler
 				return
 			}
 
-			writeAuthError(w, "UNAUTHORIZED", "missing authorization header", http.StatusUnauthorized)
+			httpx.WriteHTTPError(w, r, httpx.NewHTTPError(http.StatusUnauthorized, "UNAUTHORIZED", "missing authorization header"))
 		})
 	}
 }
@@ -210,6 +212,6 @@ func validKeyPrefix(key, env string) bool {
 	if env == "production" || env == "prod" {
 		return strings.HasPrefix(key, keyPrefixProd)
 	}
-	// All non-production environments accept test keys.
-	return strings.HasPrefix(key, keyPrefixTest) || strings.HasPrefix(key, keyPrefixProd)
+	// Non-production environments accept only test keys.
+	return strings.HasPrefix(key, keyPrefixTest)
 }

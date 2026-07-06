@@ -48,7 +48,7 @@ func (h *TemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Create(ctx, &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteCreated(w, r, resp)
@@ -62,7 +62,7 @@ func (h *TemplateHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.GetByID(ctx, chi.URLParam(r, "id"))
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -95,7 +95,7 @@ func (h *TemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.List(ctx, filter)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -121,7 +121,7 @@ func (h *TemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Update(ctx, chi.URLParam(r, "id"), &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
@@ -134,7 +134,7 @@ func (h *TemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.svc.Delete(ctx, chi.URLParam(r, "id")); err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteNoContent(w)
@@ -155,7 +155,7 @@ func (h *TemplateHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.svc.Preview(ctx, chi.URLParam(r, "id"), &req)
 	if err != nil {
 		observability.RecordError(ctx, err)
-		writeError(w, r, err)
+		httpx.WriteError(w, r, err)
 		return
 	}
 	httpx.WriteSuccess(w, r, resp)
