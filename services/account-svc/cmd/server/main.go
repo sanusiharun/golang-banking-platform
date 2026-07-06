@@ -18,13 +18,17 @@ import (
 	"syscall"
 	"time"
 
-	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
+	"github.com/sanusi/banking/pkg/cli"
 	"github.com/sanusi/banking/pkg/logger"
+	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	svcconfig "github.com/sanusi/banking/services/account-svc/config"
 )
 
 func main() {
-	if err := run(); err != nil {
+	// Root defaults to serve, so a bare `account-svc` invocation still boots the
+	// HTTP server exactly as before. Subcommands are additive and opt-in.
+	root := cli.NewRoot("account-svc", run)
+	if err := root.Execute(); err != nil {
 		// slog may not be configured yet if config load failed,
 		// so fall back to plain stderr before exiting.
 		slog.Error("fatal", slog.String("error", err.Error()))

@@ -19,13 +19,17 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sanusi/banking/pkg/cli"
 	"github.com/sanusi/banking/pkg/logger"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	svcconfig "github.com/sanusi/banking/services/notification-svc/config"
 )
 
 func main() {
-	if err := run(); err != nil {
+	// Root defaults to serve, so a bare `notification-svc` invocation still boots
+	// the HTTP server and worker pool exactly as before. Subcommands are opt-in.
+	root := cli.NewRoot("notification-svc", run)
+	if err := root.Execute(); err != nil {
 		slog.Error("fatal", slog.String("error", err.Error()))
 		os.Exit(1)
 	}

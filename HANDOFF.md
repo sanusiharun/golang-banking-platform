@@ -179,6 +179,7 @@ environment:
 - `pkg/httpx` — canonical response helpers (all services use this, no local duplicates); `mapDomainError` handles all pkg/errors types including 429 RateLimited
 - `pkg/middleware` — JWT auth, `AuthenticateAny`, `RequireRole`, rate limit, tracing, metrics; all error responses now via `httpx.WriteHTTPError` (no raw JSON)
 - `pkg/errors`, `pkg/observability`, `pkg/featureflag`, `pkg/idempotency`
+- `pkg/cli` — shared Cobra root builder (`NewRoot`). Every service's `main()` builds its root via `cli.NewRoot(name, run)`; the root **defaults to serve**, so a bare `./svc` invocation boots the HTTP server + workers exactly as before (Docker `ENTRYPOINT`/compose unchanged). Explicit `serve` subcommand also registered; the auto-generated `completion` command is hidden. Subcommands (migrate, gen-keys, worker) are additive/opt-in — see Pending.
 
 ### Error handling (unified 2026-07-06)
 All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` helpers anywhere.
@@ -306,6 +307,7 @@ go test -run TestLogin_Success ./services/auth-svc/tests/unit
 - [ ] **payment-svc ACCOUNT_SVC_API_KEY** — `services/payment-svc/.env` has `ACCOUNT_SVC_API_KEY=` empty; generate a `bp_live_*` service account key via `POST /internal/service-accounts` on auth-svc and paste it in
 - [ ] **Integration tests** — scaffold exists in `services/*/tests/integration/`, no tests written
 - [ ] **k6 load tests** — scripts in `performance-test-k6/`, run with `make k6-smoke`
+- [ ] **CLI subcommands (Phase 2)** — `pkg/cli` foundation shipped (serve-by-default). Add `migrate` (reuse `golang-migrate/migrate/v4`, already a dep — works inside alpine where psql is absent) and `gen-keys` (RS256 in Go, avoids `sed`/base64 corruption). Optional later: `worker`-only subcommand + repoint Makefile `migrate-*`/`gen-keys` to the binary.
 
 ---
 

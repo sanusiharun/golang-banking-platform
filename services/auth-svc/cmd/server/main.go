@@ -18,13 +18,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sanusi/banking/pkg/cli"
 	"github.com/sanusi/banking/pkg/logger"
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	svcconfig "github.com/sanusi/banking/services/auth-svc/config"
 )
 
 func main() {
-	if err := run(); err != nil {
+	// Root defaults to serve, so a bare `auth-svc` invocation still boots the
+	// HTTP server and background workers exactly as before. Subcommands are
+	// additive and opt-in.
+	root := cli.NewRoot("auth-svc", run)
+	if err := root.Execute(); err != nil {
 		slog.Error("fatal", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
