@@ -18,8 +18,8 @@ import (
 	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/database"
 	pkgidempotency "github.com/sanusi/banking/pkg/idempotency"
-	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/messaging"
+	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
 	svcconfig "github.com/sanusi/banking/services/payment-svc/config"
 	"github.com/sanusi/banking/services/payment-svc/internal/infra/accountclient"
@@ -137,6 +137,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 
 	// ── Repositories ──────────────────────────────────────────────────────────
 	txnRepo := postgres.NewTransactionRepository(db)
+	merchantRepo := postgres.NewMerchantRepository(db)
+	qrisChargeRepo := postgres.NewQRISChargeRepository(db)
 
 	// ── Account Service client ────────────────────────────────────────────────
 	accountClient := accountclient.New(cfg.AccountSvcURL, cfg.AccountSvcAPIKey)
@@ -144,10 +146,17 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	// ── Service ───────────────────────────────────────────────────────────────
 	validate := validator.New()
 	paymentSvc := service.NewPaymentService(txnRepo, accountClient, paymentPublisher)
+	qrisSvc := service.NewQRISService(merchantRepo, qrisChargeRepo, txnRepo, accountClient, paymentPublisher, service.QRISConfig{
+		AcquirerGUID: cfg.QRISAcquirerGUID,
+		DefaultMCC:   cfg.QRISDefaultMCC,
+		Currency:     cfg.QRISCurrency,
+		ChargeTTL:    time.Duration(cfg.QRISChargeTTLSeconds) * time.Second,
+	})
 
 	// ── Handlers ──────────────────────────────────────────────────────────────
 	paymentHandler := transporthttp.NewPaymentHandler(paymentSvc, validate)
 	inquiryHandler := transporthttp.NewInquiryHandler(paymentSvc)
+	qrisHandler := transporthttp.NewQRISHandler(qrisSvc, validate)
 
 	// ── Health checks ─────────────────────────────────────────────────────────
 	health := observability.NewHealthHandler()
@@ -168,6 +177,7 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	router := transporthttp.NewRouter(transporthttp.RouterConfig{
 		PaymentHandler: paymentHandler,
 		InquiryHandler: inquiryHandler,
+		QRISHandler:    qrisHandler,
 		Health:         health,
 		JWTConfig: pkgmiddleware.JWTConfig{
 			PublicKey:  publicKey,

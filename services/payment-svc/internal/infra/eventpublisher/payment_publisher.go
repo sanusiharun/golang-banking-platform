@@ -29,17 +29,17 @@ type PaymentEventPublisher interface {
 
 // PaymentEvent carries transaction lifecycle data for downstream consumers.
 type PaymentEvent struct {
-	TransactionID         string    `json:"transaction_id"`
-	PaymentType           string    `json:"payment_type"`
-	Status                string    `json:"status"`
-	SourceAccountID       string    `json:"source_account_id"`
-	DestinationAccountID  string    `json:"destination_account_id"`
-	Amount                int64     `json:"amount"`
-	Currency              string    `json:"currency"`
-	FailureReason         string    `json:"failure_reason,omitempty"`
-	CorrelationID         string    `json:"correlation_id,omitempty"`
-	InitiatedBy           string    `json:"initiated_by"`
-	OccurredAt            time.Time `json:"occurred_at"`
+	TransactionID        string    `json:"transaction_id"`
+	PaymentType          string    `json:"payment_type"`
+	Status               string    `json:"status"`
+	SourceAccountID      string    `json:"source_account_id"`
+	DestinationAccountID string    `json:"destination_account_id"`
+	Amount               int64     `json:"amount"`
+	Currency             string    `json:"currency"`
+	FailureReason        string    `json:"failure_reason,omitempty"`
+	CorrelationID        string    `json:"correlation_id,omitempty"`
+	InitiatedBy          string    `json:"initiated_by"`
+	OccurredAt           time.Time `json:"occurred_at"`
 }
 
 // natsPaymentPublisher implements PaymentEventPublisher using pkg/messaging.

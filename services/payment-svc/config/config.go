@@ -42,8 +42,8 @@ type Config struct {
 	DBLogLevel string
 
 	// Redis
-	RedisAddr          string
-	RedisPassword      string
+	RedisAddr           string
+	RedisPassword       string
 	IdempotencyTTLHours int
 
 	// NATS JetStream
@@ -63,6 +63,12 @@ type Config struct {
 	RateLimitRPS   int
 	RateLimitBurst int
 
+	// QRIS
+	QRISAcquirerGUID     string
+	QRISDefaultMCC       string
+	QRISCurrency         string
+	QRISChargeTTLSeconds int
+
 	// Observability
 	OTelEnabled      bool
 	OTelLogsEnabled  bool
@@ -75,42 +81,46 @@ func Load() (*Config, error) {
 	_ = loadDotEnv(".env")
 
 	cfg := &Config{
-		ServiceName:         getEnv("SERVICE_NAME", "payment-svc"),
-		ServiceVersion:      getEnv("SERVICE_VERSION", "dev"),
-		Environment:         getEnv("ENVIRONMENT", "local"),
-		HTTPPort:            getEnvInt("HTTP_PORT", 8085),
-		ReadTimeout:         getEnvDuration("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:        getEnvDuration("WRITE_TIMEOUT", 30*time.Second),
-		IdleTimeout:         getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
-		ShutdownTimeout:     getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
-		HandlerTimeout:      getEnvInt("HANDLER_TIMEOUT_SECS", 25),
-		LogLevel:            getEnv("LOG_LEVEL", "info"),
-		LogFormat:           getEnv("LOG_FORMAT", "json"),
-		DBHost:              getEnv("DB_HOST", ""),
-		DBPort:              getEnvInt("DB_PORT", 5432),
-		DBName:              getEnv("DB_NAME", "banking_payments"),
-		DBUser:              getEnv("DB_USER", ""),
-		DBPassword:          getEnv("DB_PASSWORD", ""),
-		DBSSLMode:           getEnv("DB_SSLMODE", "disable"),
-		DBMaxConns:          getEnvInt("DB_MAX_CONNS", 25),
-		DBMinConns:          getEnvInt("DB_MIN_CONNS", 5),
-		DBLogLevel:          getEnv("DB_LOG_LEVEL", "silent"),
-		RedisAddr:           getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:       getEnv("REDIS_PASSWORD", ""),
-		IdempotencyTTLHours: getEnvInt("IDEMPOTENCY_TTL_HOURS", 24),
-		NATSUrl:             getEnv("NATS_URL", "nats://localhost:9053"),
-		NATSConsumer:        getEnv("NATS_CONSUMER", "payment-svc-consumer"),
-		AccountSvcURL:       getEnv("ACCOUNT_SVC_URL", "http://localhost:8081"),
-		AccountSvcAPIKey:    getEnv("ACCOUNT_SVC_API_KEY", ""),
-		JWTPublicKeyB64:     getEnv("JWT_PUBLIC_KEY_B64", ""),
-		JWTIssuer:           getEnv("JWT_ISSUER", "banking-platform"),
-		JWTSubjectKeyB64:    getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
-		RateLimitRPS:        getEnvInt("RATE_LIMIT_RPS", 500),
-		RateLimitBurst:      getEnvInt("RATE_LIMIT_BURST", 1000),
-		OTelEnabled:         getEnvBool("OTEL_ENABLED", false),
-		OTelLogsEnabled:     getEnvBool("OTEL_LOGS_ENABLED", false),
-		OTelEndpoint:        getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		OTelSamplingRate:    getEnvFloat("OTEL_SAMPLING_RATE", 1.0),
+		ServiceName:          getEnv("SERVICE_NAME", "payment-svc"),
+		ServiceVersion:       getEnv("SERVICE_VERSION", "dev"),
+		Environment:          getEnv("ENVIRONMENT", "local"),
+		HTTPPort:             getEnvInt("HTTP_PORT", 8085),
+		ReadTimeout:          getEnvDuration("READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:         getEnvDuration("WRITE_TIMEOUT", 30*time.Second),
+		IdleTimeout:          getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
+		ShutdownTimeout:      getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
+		HandlerTimeout:       getEnvInt("HANDLER_TIMEOUT_SECS", 25),
+		LogLevel:             getEnv("LOG_LEVEL", "info"),
+		LogFormat:            getEnv("LOG_FORMAT", "json"),
+		DBHost:               getEnv("DB_HOST", ""),
+		DBPort:               getEnvInt("DB_PORT", 5432),
+		DBName:               getEnv("DB_NAME", "banking_payments"),
+		DBUser:               getEnv("DB_USER", ""),
+		DBPassword:           getEnv("DB_PASSWORD", ""),
+		DBSSLMode:            getEnv("DB_SSLMODE", "disable"),
+		DBMaxConns:           getEnvInt("DB_MAX_CONNS", 25),
+		DBMinConns:           getEnvInt("DB_MIN_CONNS", 5),
+		DBLogLevel:           getEnv("DB_LOG_LEVEL", "silent"),
+		RedisAddr:            getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
+		IdempotencyTTLHours:  getEnvInt("IDEMPOTENCY_TTL_HOURS", 24),
+		NATSUrl:              getEnv("NATS_URL", "nats://localhost:9053"),
+		NATSConsumer:         getEnv("NATS_CONSUMER", "payment-svc-consumer"),
+		AccountSvcURL:        getEnv("ACCOUNT_SVC_URL", "http://localhost:8081"),
+		AccountSvcAPIKey:     getEnv("ACCOUNT_SVC_API_KEY", ""),
+		JWTPublicKeyB64:      getEnv("JWT_PUBLIC_KEY_B64", ""),
+		JWTIssuer:            getEnv("JWT_ISSUER", "banking-platform"),
+		JWTSubjectKeyB64:     getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
+		RateLimitRPS:         getEnvInt("RATE_LIMIT_RPS", 500),
+		RateLimitBurst:       getEnvInt("RATE_LIMIT_BURST", 1000),
+		QRISAcquirerGUID:     getEnv("QRIS_ACQUIRER_GUID", "ID.CO.QRIS.WWW"),
+		QRISDefaultMCC:       getEnv("QRIS_DEFAULT_MCC", "5411"),
+		QRISCurrency:         getEnv("QRIS_CURRENCY", "IDR"),
+		QRISChargeTTLSeconds: getEnvInt("QRIS_CHARGE_TTL_SECONDS", 1800),
+		OTelEnabled:          getEnvBool("OTEL_ENABLED", false),
+		OTelLogsEnabled:      getEnvBool("OTEL_LOGS_ENABLED", false),
+		OTelEndpoint:         getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTelSamplingRate:     getEnvFloat("OTEL_SAMPLING_RATE", 1.0),
 	}
 
 	return cfg, cfg.validate()

@@ -204,12 +204,22 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 - `docs/payment-svc/progress-tracking.md` — 9 epics (E1–E9), all tasks ⬜, dependency graph, 3 tech debt items (TD-01–TD-03)
 - `docs/payment-svc/review.md` — all criteria ⬜ Unverified; P0 recommendations: implement compensation flow and idempotency before opening any endpoints
 - Key design decisions: Redis SET NX for first-writer-wins idempotency; DB unique constraint on `idempotency_key` and `reversal.original_txn_id` as backstops; circuit breaker + exponential backoff on Account Service; NATS event publishing is non-blocking fire-and-forget; NATS consumer uses queue group for exactly-once delivery across instances
-- **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; all payment endpoints return 501 until E4 implemented
+- **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; core transfer/merchant/fee/refund/reverse endpoints still return `errNotImplemented` (E4 pending)
 - Uses `pkg/idempotency.DualStore` (Redis SET NX + Postgres fallback) — no custom idempotency code
 - Uses `pkg/httpclient` for Account Service calls (retry + backoff built in)
 - Amount stored as `BIGINT` (minor currency units) matching account-svc convention
 - Run `cd services/payment-svc && go mod tidy` before first build to generate go.sum
 - Run `datasource/postgres/06_setup_banking_payments.sql` as superuser before starting the service
+
+#### QRIS (implemented 2026-07-07)
+
+- **EMVCo MPM codec** (`internal/qris/`) — `Encode`/`Decode` over TLV + CRC-16/CCITT-FALSE (tag 63). Pure, table-driven tested (canonical CRC vector `123456789`→`29B1`, round-trip, tamper detection). Supports **dynamic** (amount-embedded, tag 01=12) and **static** (tag 01=11) QR.
+- **Merchant registry** + **qris_charges** tables via `migrations/002_create_qris_tables.up.sql`; extends the `transactions` type CHECK to allow `QRIS`. New DAOs `dao/merchant.go`, `dao/qris_charge.go`; repos in `internal/infra/postgres/`.
+- **Reusable orchestration** (`internal/service/orchestration.go`) — `executeDebitCredit` runs debit(payer)→credit(merchant) with **transaction-level idempotency** (via `GetByIdempotencyKey` + unique constraint) and **compensation** (credit failure → refund payer, mark FAILED). This is the seam the future E4 transfer/merchant flows should adopt.
+- **QRIS service** (`internal/service/qris_service.go`) — RegisterMerchant/GetMerchant/GenerateCharge/Decode/Pay. Merchant is credited to an internal account (simulated; no external acquirer). Amounts convert int64 minor units ↔ EMVCo major decimal.
+- **Endpoints** (RBAC TELLER/ADMIN; ADMIN for merchant registration): `POST /v1/merchants`, `GET /v1/merchants/{id}`, `POST /v1/payments/qris/{generate,decode,pay}`. `pay` requires `Idempotency-Key`.
+- **Config:** `QRIS_ACQUIRER_GUID` (default `ID.CO.QRIS.WWW`), `QRIS_DEFAULT_MCC`, `QRIS_CURRENCY` (`IDR`), `QRIS_CHARGE_TTL_SECONDS`.
+- **Note:** used transaction-level idempotency (not the container's HTTP-oriented `DualStore`, which stays constructed-but-unused as before). CPM mode and QRIS refund/reversal are out of scope.
 
 ### notification-svc
 

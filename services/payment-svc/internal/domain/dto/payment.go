@@ -11,6 +11,7 @@ const (
 	TypeFee             = "FEE"
 	TypeRefund          = "REFUND"
 	TypeScheduled       = "SCHEDULED"
+	TypeQRIS            = "QRIS"
 
 	StatusPending    = "PENDING"
 	StatusProcessing = "PROCESSING"
@@ -23,6 +24,7 @@ const (
 	ChannelWeb       = "WEB"
 	ChannelAPI       = "API"
 	ChannelSystem    = "SYSTEM"
+	ChannelQRIS      = "QRIS"
 )
 
 // ── Initiation requests ───────────────────────────────────────────────────────
@@ -77,35 +79,35 @@ type RefundRequest struct {
 
 // TransactionResponse is returned for single-transaction endpoints.
 type TransactionResponse struct {
-	ID                    string         `json:"id"`
-	IdempotencyKey        string         `json:"idempotency_key"`
-	PaymentType           string         `json:"payment_type"`
-	Channel               string         `json:"channel"`
-	SourceAccountID       string         `json:"source_account_id"`
-	DestinationAccountID  string         `json:"destination_account_id"`
-	Amount                int64          `json:"amount"`
-	Currency              string         `json:"currency"`
-	Status                string         `json:"status"`
-	FailureReason         *string        `json:"failure_reason,omitempty"`
-	RetryCount            int            `json:"retry_count"`
-	ExternalReference     *string        `json:"external_reference,omitempty"`
-	CorrelationID         *string        `json:"correlation_id,omitempty"`
-	Description           *string        `json:"description,omitempty"`
-	Metadata              map[string]any `json:"metadata,omitempty"`
-	InitiatedBy           string         `json:"initiated_by"`
-	CreatedAt             time.Time      `json:"created_at"`
-	UpdatedAt             time.Time      `json:"updated_at"`
-	CompletedAt           *time.Time     `json:"completed_at,omitempty"`
-	ReversedAt            *time.Time     `json:"reversed_at,omitempty"`
+	ID                   string         `json:"id"`
+	IdempotencyKey       string         `json:"idempotency_key"`
+	PaymentType          string         `json:"payment_type"`
+	Channel              string         `json:"channel"`
+	SourceAccountID      string         `json:"source_account_id"`
+	DestinationAccountID string         `json:"destination_account_id"`
+	Amount               int64          `json:"amount"`
+	Currency             string         `json:"currency"`
+	Status               string         `json:"status"`
+	FailureReason        *string        `json:"failure_reason,omitempty"`
+	RetryCount           int            `json:"retry_count"`
+	ExternalReference    *string        `json:"external_reference,omitempty"`
+	CorrelationID        *string        `json:"correlation_id,omitempty"`
+	Description          *string        `json:"description,omitempty"`
+	Metadata             map[string]any `json:"metadata,omitempty"`
+	InitiatedBy          string         `json:"initiated_by"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	CompletedAt          *time.Time     `json:"completed_at,omitempty"`
+	ReversedAt           *time.Time     `json:"reversed_at,omitempty"`
 }
 
 // TransactionListResponse wraps a paginated list of transactions.
 type TransactionListResponse struct {
-	Items      []*TransactionResponse `json:"items"`
-	Total      int64                  `json:"total"`
-	Limit      int                    `json:"limit"`
-	Offset     int                    `json:"offset"`
-	HasMore    bool                   `json:"has_more"`
+	Items   []*TransactionResponse `json:"items"`
+	Total   int64                  `json:"total"`
+	Limit   int                    `json:"limit"`
+	Offset  int                    `json:"offset"`
+	HasMore bool                   `json:"has_more"`
 }
 
 // ── List filter ───────────────────────────────────────────────────────────────

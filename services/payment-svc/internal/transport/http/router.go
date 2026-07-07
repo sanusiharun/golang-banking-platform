@@ -13,15 +13,16 @@ import (
 
 // RouterConfig holds all dependencies for the payment-svc HTTP router.
 type RouterConfig struct {
-	PaymentHandler  *PaymentHandler
-	InquiryHandler  *InquiryHandler
-	Health          *observability.HealthHandler
-	JWTConfig       pkgmiddleware.JWTConfig
-	APIKeyConfig    pkgmiddleware.APIKeyConfig
-	RateLimitRPS    int
-	RateLimitBurst  int
-	RequestTimeout  int
-	Environment     string
+	PaymentHandler *PaymentHandler
+	InquiryHandler *InquiryHandler
+	QRISHandler    *QRISHandler
+	Health         *observability.HealthHandler
+	JWTConfig      pkgmiddleware.JWTConfig
+	APIKeyConfig   pkgmiddleware.APIKeyConfig
+	RateLimitRPS   int
+	RateLimitBurst int
+	RequestTimeout int
+	Environment    string
 }
 
 // NewRouter builds the fully configured chi router for payment-svc.
@@ -50,6 +51,14 @@ func NewRouter(cfg RouterConfig) http.Handler {
 		}))
 		r.Use(pkgmiddleware.AuthenticateAny(cfg.JWTConfig, cfg.APIKeyConfig))
 
+		// QRIS merchant registry
+		r.Route("/v1/merchants", func(r chi.Router) {
+			r.With(pkgmiddleware.RequireRole("ADMIN")).
+				Post("/", cfg.QRISHandler.RegisterMerchant)
+			r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
+				Get("/{id}", cfg.QRISHandler.GetMerchant)
+		})
+
 		// Payment initiation
 		r.Route("/v1/payments", func(r chi.Router) {
 			r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
@@ -63,6 +72,16 @@ func NewRouter(cfg RouterConfig) http.Handler {
 
 			r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
 				Post("/refund", cfg.PaymentHandler.Refund)
+
+			// QRIS
+			r.Route("/qris", func(r chi.Router) {
+				r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
+					Post("/generate", cfg.QRISHandler.Generate)
+				r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
+					Post("/decode", cfg.QRISHandler.Decode)
+				r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
+					Post("/pay", cfg.QRISHandler.Pay)
+			})
 
 			// Inquiry
 			r.With(pkgmiddleware.RequireRole("TELLER", "ADMIN")).
