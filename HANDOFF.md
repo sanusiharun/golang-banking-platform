@@ -249,10 +249,11 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 ## Session 2026-07-08 — Skills → Slash Commands
 
 - Converted `skills/` documents into proper Claude Code project-level slash commands:
-  - `/backend-delivery-framework` — invoke with slash command in Claude Code (reads `.claude/commands/backend-delivery-framework.md`)
-  - `/microservice-standards` — invoke with slash command in Claude Code (reads `.claude/commands/microservice-standards.md`)
-  - `/monitoring-observability-standards` — invoke with slash command in Claude Code (reads `.claude/commands/monitoring-observability-standards.md`)
+  - `/eng-delivery` — backend delivery framework (`.claude/commands/eng-delivery.md`)
+  - `/eng-standards` — microservice standards (`.claude/commands/eng-standards.md`)
+  - `/eng-observability` — monitoring & observability standards (`.claude/commands/eng-observability.md`)
 - `skills/` folder and `.skill` archives remain as canonical source; `.claude/commands/` mirrors for project-level access
+- `docs/COMMANDS.md` — quick-reference for all slash commands
 - Type `/` in Claude Code to autocomplete — all three skills now appear in the command palette
 
 ---
