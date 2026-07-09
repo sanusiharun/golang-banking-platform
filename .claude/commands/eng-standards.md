@@ -40,7 +40,7 @@ services/{service-name}/
 │   └── migrations.go     ← embed directive for migration files
 ├── tests/
 │   ├── integration/      ← build tag: //go:build integration
-│   └── unit/             ← (or alongside source files)
+│   └── unit/             ← package unit; mocks.go, helpers.go, {name}_test.go
 ├── Dockerfile
 ├── go.mod
 ├── go.sum
@@ -369,42 +369,7 @@ go func() {
 
 ## 15. Testing Standards
 
-### Unit tests
-- Table-driven with `t.Run(name, ...)` sub-tests.
-- Mock dependencies via interface substitution (no reflection-based mocking libraries).
-- Test file alongside source: `auth_service_test.go` next to `auth_service.go`.
-- Cover happy path + error paths + edge cases.
-
-```go
-func TestAuthService_Login(t *testing.T) {
-    tests := []struct {
-        name     string
-        username string
-        password string
-        wantErr  bool
-    }{
-        {"valid credentials", "alice", "correct", false},
-        {"wrong password", "alice", "wrong", true},
-        {"unknown user", "nobody", "anything", true},
-    }
-    for _, tt := range tests {
-        t.Run(tt.name, func(t *testing.T) {
-            // ...
-        })
-    }
-}
-```
-
-### Integration tests
-- Build tag: `//go:build integration`
-- Must run against a real database (no mocks for DB logic).
-- Test file in `tests/integration/` or alongside source with build tag.
-- Use `testcontainers-go` or rely on the local Docker stack.
-
-### What not to test
-- `pkg/httpx` response helpers — they are trivial wrappers.
-- Container wiring (`container.go`) — verify by running the service.
-- Config validation — cover with one or two cases; don't over-test env loading.
+See [[eng-testing]] skill (`/eng-testing`) for TDD workflow, mocks, helpers, and coverage targets. Summary: tests live in `services/{name}/tests/unit/` and `tests/integration/`, never alongside source.
 
 ---
 

@@ -260,7 +260,7 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 
 ## Testing Standards (2026-06-21)
 
-All unit tests now follow a standardized structure defined in **TESTING_STANDARDS.md**.
+All unit tests now follow a standardized structure defined in the **eng-testing** skill (`/eng-testing`).
 
 ### Structure
 
