@@ -1,16 +1,31 @@
 package unit
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-playground/validator/v10"
 
 	"github.com/sanusi/banking/services/audit-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/audit-svc/internal/repository/postgres"
 	"github.com/sanusi/banking/services/audit-svc/internal/transport"
 )
+
+// withURLParams attaches chi route params to a request's context so
+// chi.URLParam(r, ...) works in handlers without a full router.
+func withURLParams(r *http.Request, params map[string]string) *http.Request {
+	rctx := chi.NewRouteContext()
+	for k, v := range params {
+		rctx.URLParams.Add(k, v)
+	}
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+}
 
 func TestAuditHandler_IngestEvent(t *testing.T) {
 	validBody := `{
@@ -55,9 +70,10 @@ func TestAuditHandler_IngestEvent(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockSvc := &MockAuditService{Err: tt.svcErr}
-			handler := transport.NewAuditHandler(mockSvc, NewValidator())
+			handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-			req := NewChiRequest(http.MethodPost, "/v1/audit/events", tt.body, nil)
+			req := httptest.NewRequest(http.MethodPost, "/v1/audit/events", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
 			handler.IngestEvent(w, req)
@@ -75,9 +91,10 @@ func TestAuditHandler_IngestEvent(t *testing.T) {
 func TestAuditHandler_GetEvent(t *testing.T) {
 	t.Run("success returns 200 with event", func(t *testing.T) {
 		mockSvc := &MockAuditService{Event: &dto.EventResponse{ID: "evt-001"}}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/events/evt-001", "", map[string]string{"id": "evt-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/evt-001", nil)
+		req = withURLParams(req, map[string]string{"id": "evt-001"})
 		w := httptest.NewRecorder()
 
 		handler.GetEvent(w, req)
@@ -89,9 +106,10 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 
 	t.Run("not found returns 404", func(t *testing.T) {
 		mockSvc := &MockAuditService{Err: postgres.ErrNotFound}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/events/missing", "", map[string]string{"id": "missing"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/missing", nil)
+		req = withURLParams(req, map[string]string{"id": "missing"})
 		w := httptest.NewRecorder()
 
 		handler.GetEvent(w, req)
@@ -103,9 +121,10 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 
 	t.Run("other error returns 500", func(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/events/evt-001", "", map[string]string{"id": "evt-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/evt-001", nil)
+		req = withURLParams(req, map[string]string{"id": "evt-001"})
 		w := httptest.NewRecorder()
 
 		handler.GetEvent(w, req)
@@ -119,9 +138,9 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 func TestAuditHandler_ListEvents(t *testing.T) {
 	t.Run("success returns 200", func(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{Total: 0}}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/events?limit=20", "", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events?limit=20", nil)
 		w := httptest.NewRecorder()
 
 		handler.ListEvents(w, req)
@@ -136,9 +155,9 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 
 	t.Run("service error returns 500", func(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/events", "", nil)
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events", nil)
 		w := httptest.NewRecorder()
 
 		handler.ListEvents(w, req)
@@ -147,14 +166,54 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 			t.Errorf("status = %d; want %d", w.Code, http.StatusInternalServerError)
 		}
 	})
+
+	t.Run("parses from/to date range", func(t *testing.T) {
+		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
+
+		req := httptest.NewRequest(http.MethodGet,
+			"/v1/audit/events?from=2026-01-01T00:00:00Z&to=2026-01-31T00:00:00Z", nil)
+		w := httptest.NewRecorder()
+
+		handler.ListEvents(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d; want %d", w.Code, http.StatusOK)
+		}
+		if mockSvc.LastListParams.From == nil || mockSvc.LastListParams.To == nil {
+			t.Fatal("expected From and To to be parsed")
+		}
+		if mockSvc.LastListParams.From.Year() != 2026 || mockSvc.LastListParams.To.Day() != 31 {
+			t.Errorf("From/To parsed incorrectly: %v / %v", mockSvc.LastListParams.From, mockSvc.LastListParams.To)
+		}
+	})
+
+	t.Run("ignores unparseable date range", func(t *testing.T) {
+		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
+
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events?from=not-a-date&to=also-bad", nil)
+		w := httptest.NewRecorder()
+
+		handler.ListEvents(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Errorf("status = %d; want %d", w.Code, http.StatusOK)
+		}
+		if mockSvc.LastListParams.From != nil || mockSvc.LastListParams.To != nil {
+			t.Errorf("expected From/To to stay nil on unparseable input, got %v / %v",
+				mockSvc.LastListParams.From, mockSvc.LastListParams.To)
+		}
+	})
 }
 
 func TestAuditHandler_ListActorEvents(t *testing.T) {
 	t.Run("success returns 200", func(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", "", map[string]string{"actor_id": "usr-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
+		req = withURLParams(req, map[string]string{"actor_id": "usr-001"})
 		w := httptest.NewRecorder()
 
 		handler.ListActorEvents(w, req)
@@ -169,9 +228,10 @@ func TestAuditHandler_ListActorEvents(t *testing.T) {
 
 	t.Run("service error returns 500", func(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", "", map[string]string{"actor_id": "usr-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
+		req = withURLParams(req, map[string]string{"actor_id": "usr-001"})
 		w := httptest.NewRecorder()
 
 		handler.ListActorEvents(w, req)
@@ -185,10 +245,10 @@ func TestAuditHandler_ListActorEvents(t *testing.T) {
 func TestAuditHandler_ListResourceEvents(t *testing.T) {
 	t.Run("success returns 200", func(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", "",
-			map[string]string{"resource": "account", "resource_id": "acc-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
+		req = withURLParams(req, map[string]string{"resource": "account", "resource_id": "acc-001"})
 		w := httptest.NewRecorder()
 
 		handler.ListResourceEvents(w, req)
@@ -204,10 +264,10 @@ func TestAuditHandler_ListResourceEvents(t *testing.T) {
 
 	t.Run("service error returns 500", func(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
-		handler := transport.NewAuditHandler(mockSvc, NewValidator())
+		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := NewChiRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", "",
-			map[string]string{"resource": "account", "resource_id": "acc-001"})
+		req := httptest.NewRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
+		req = withURLParams(req, map[string]string{"resource": "account", "resource_id": "acc-001"})
 		w := httptest.NewRecorder()
 
 		handler.ListResourceEvents(w, req)
@@ -218,52 +278,14 @@ func TestAuditHandler_ListResourceEvents(t *testing.T) {
 	})
 }
 
-func TestAuditHandler_ListEvents_DateRangeParams(t *testing.T) {
-	mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
-	handler := transport.NewAuditHandler(mockSvc, NewValidator())
-
-	req := NewChiRequest(http.MethodGet,
-		"/v1/audit/events?from=2026-01-01T00:00:00Z&to=2026-01-31T00:00:00Z", "", nil)
-	w := httptest.NewRecorder()
-
-	handler.ListEvents(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d; want %d", w.Code, http.StatusOK)
-	}
-	if mockSvc.LastListParams.From == nil || mockSvc.LastListParams.To == nil {
-		t.Fatal("expected From and To to be parsed")
-	}
-	if mockSvc.LastListParams.From.Year() != 2026 || mockSvc.LastListParams.To.Day() != 31 {
-		t.Errorf("From/To parsed incorrectly: %v / %v", mockSvc.LastListParams.From, mockSvc.LastListParams.To)
-	}
-}
-
-func TestAuditHandler_ListEvents_InvalidDateRangeIgnored(t *testing.T) {
-	mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
-	handler := transport.NewAuditHandler(mockSvc, NewValidator())
-
-	req := NewChiRequest(http.MethodGet, "/v1/audit/events?from=not-a-date&to=also-bad", "", nil)
-	w := httptest.NewRecorder()
-
-	handler.ListEvents(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("status = %d; want %d", w.Code, http.StatusOK)
-	}
-	if mockSvc.LastListParams.From != nil || mockSvc.LastListParams.To != nil {
-		t.Errorf("expected From/To to stay nil on unparseable input, got %v / %v",
-			mockSvc.LastListParams.From, mockSvc.LastListParams.To)
-	}
-}
-
 // sanity check that the JSON envelope shape is what we expect from httpx.WriteCreated.
 func TestAuditHandler_IngestEvent_ResponseShape(t *testing.T) {
 	mockSvc := &MockAuditService{}
-	handler := transport.NewAuditHandler(mockSvc, NewValidator())
+	handler := transport.NewAuditHandler(mockSvc, validator.New())
 
 	body := `{"actor_type":"user","actor_id":"usr-001","action":"login","status":"success","service_name":"auth-svc"}`
-	req := NewChiRequest(http.MethodPost, "/v1/audit/events", body, nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/audit/events", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	handler.IngestEvent(w, req)
