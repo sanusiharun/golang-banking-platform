@@ -224,23 +224,27 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 ### notification-svc
 
 - Full 5-document lifecycle written (reverse-engineered from code, 2026-06-19)
-- `docs/goals.md` — 17 FR, 9 NFR, 10 constraints, 17 acceptance criteria, service boundaries
-- `docs/context.md` — domain overview, bounded context diagram, 6 business workflows, actor table, risk register, upstream/downstream systems
-- `docs/architecture.md` — Mermaid diagrams (high-level + sequence), layering rules, package tree, SQL DDL for 3 tables, full API table, security/observability/reliability design
-- `docs/progress-tracking.md` — 7 epics, 48 tasks (most ✅), 10 tech debt items (TD-01–TD-10)
-- `docs/review.md` — FR compliance (16/17 pass, FR-02 partial — stubs), NFR (3 unverified: latency/throughput), 10 TD items, immediate/short/medium recommendations
+- `docs/notification-svc/goals.md` — 17 FR, 9 NFR, 10 constraints, 17 acceptance criteria, service boundaries
+- `docs/notification-svc/context.md` — domain overview, bounded context diagram, 6 business workflows, actor table, risk register, upstream/downstream systems
+- `docs/notification-svc/architecture.md` — Mermaid diagrams (high-level + sequence), layering rules, package tree, SQL DDL for 3 tables, full API table, security/observability/reliability design
+- `docs/notification-svc/progress-tracking.md` — 7 epics, 48 tasks (most ✅), 10 tech debt items (TD-01–TD-10)
+- `docs/notification-svc/review.md` — FR compliance (16/17 pass, FR-02 partial — stubs), NFR (3 unverified: latency/throughput), 10 TD items, immediate/short/medium recommendations
 - Key gaps: EMAIL/SMS/PUSH/WHATSAPP are stubs (TD-01–TD-04); no integration tests; scheduler not distributed (TD-06); no retry backoff (TD-05)
+
+### account-svc
+
+- `docs/account-svc/{goals,context,architecture,progress-tracking,review}.md` — scaffolded stubs (2026-07-10), live service, delivery-framework pass not yet run
 
 ---
 
 ## Session 2026-06-16 — Documentation & Skills
 
 - Created `docs/` with full auth-svc reverse-engineering documentation:
-  - `docs/goals.md` — business objectives, FR/NFR/constraints, acceptance criteria
-  - `docs/context.md` — domain overview, bounded context, actors, workflows, system integrations
-  - `docs/architecture.md` — Mermaid diagrams, component design, API, storage DDL, security/observability design
-  - `docs/progress-tracking.md` — epics, tasks with current status, blocker table, tech debt register
-  - `docs/review.md` — requirement compliance (24/24 FR pass), architecture compliance, security posture, recommendations
+  - `docs/auth-svc/goals.md` — business objectives, FR/NFR/constraints, acceptance criteria
+  - `docs/auth-svc/context.md` — domain overview, bounded context, actors, workflows, system integrations
+  - `docs/auth-svc/architecture.md` — Mermaid diagrams, component design, API, storage DDL, security/observability design
+  - `docs/auth-svc/progress-tracking.md` — epics, tasks with current status, blocker table, tech debt register
+  - `docs/auth-svc/review.md` — requirement compliance (24/24 FR pass), architecture compliance, security posture, recommendations
 - Created `skills/` with three reusable engineering methodology documents:
   - `skills/backend-delivery-framework.md` — documentation lifecycle, traceability rules, delivery workflow, engineering governance
   - `skills/microservice-standards.md` — folder structure, layering, naming, error handling, testing standards
@@ -253,7 +257,7 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
   - `/eng-standards` — microservice standards (`.claude/commands/eng-standards.md`)
   - `/eng-observability` — monitoring & observability standards (`.claude/commands/eng-observability.md`)
 - `skills/` folder and `.skill` archives remain as canonical source; `.claude/commands/` mirrors for project-level access
-- `docs/COMMANDS.md` — quick-reference for all slash commands
+- `.claude/commands/README.md` — quick-reference for all slash commands
 - Type `/` in Claude Code to autocomplete — all three skills now appear in the command palette
 
 ---
