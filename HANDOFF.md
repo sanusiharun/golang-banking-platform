@@ -198,11 +198,11 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 ### payment-svc (port 8085 — docs complete, implementation not started)
 
 - Full 5-document lifecycle written (2026-06-19)
-- `docs/payment-svc/goals.md` — 5 BO, 20 FR, 14 NFR, 6 constraints, 6 assumptions, 12 acceptance criteria, service boundaries
-- `docs/payment-svc/context.md` — domain overview, bounded context diagram, 8 business workflows (BW-01–BW-08), actor table, upstream/downstream systems, 8 risks (R-01–R-08), assumptions revisited
-- `docs/payment-svc/architecture.md` — Mermaid diagrams (high-level + request lifecycle), layered component design, full package tree, SQL DDL for 3 tables (`transactions`, `reversals`, `idempotency_records`), Redis key patterns, full API table, integration patterns, security/observability/reliability design
-- `docs/payment-svc/progress-tracking.md` — 9 epics (E1–E9), all tasks ⬜, dependency graph, 3 tech debt items (TD-01–TD-03)
-- `docs/payment-svc/review.md` — all criteria ⬜ Unverified; P0 recommendations: implement compensation flow and idempotency before opening any endpoints
+- `services/payment-svc/docs/goals.md` — 5 BO, 20 FR, 14 NFR, 6 constraints, 6 assumptions, 12 acceptance criteria, service boundaries
+- `services/payment-svc/docs/context.md` — domain overview, bounded context diagram, 8 business workflows (BW-01–BW-08), actor table, upstream/downstream systems, 8 risks (R-01–R-08), assumptions revisited
+- `services/payment-svc/docs/architecture.md` — Mermaid diagrams (high-level + request lifecycle), layered component design, full package tree, SQL DDL for 3 tables (`transactions`, `reversals`, `idempotency_records`), Redis key patterns, full API table, integration patterns, security/observability/reliability design
+- `services/payment-svc/docs/progress-tracking.md` — 9 epics (E1–E9), all tasks ⬜, dependency graph, 3 tech debt items (TD-01–TD-03)
+- `services/payment-svc/docs/review.md` — all criteria ⬜ Unverified; P0 recommendations: implement compensation flow and idempotency before opening any endpoints
 - Key design decisions: Redis SET NX for first-writer-wins idempotency; DB unique constraint on `idempotency_key` and `reversal.original_txn_id` as backstops; circuit breaker + exponential backoff on Account Service; NATS event publishing is non-blocking fire-and-forget; NATS consumer uses queue group for exactly-once delivery across instances
 - **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; core transfer/merchant/fee/refund/reverse endpoints still return `errNotImplemented` (E4 pending)
 - Uses `pkg/idempotency.DualStore` (Redis SET NX + Postgres fallback) — no custom idempotency code
@@ -224,27 +224,28 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 ### notification-svc
 
 - Full 5-document lifecycle written (reverse-engineered from code, 2026-06-19)
-- `docs/notification-svc/goals.md` — 17 FR, 9 NFR, 10 constraints, 17 acceptance criteria, service boundaries
-- `docs/notification-svc/context.md` — domain overview, bounded context diagram, 6 business workflows, actor table, risk register, upstream/downstream systems
-- `docs/notification-svc/architecture.md` — Mermaid diagrams (high-level + sequence), layering rules, package tree, SQL DDL for 3 tables, full API table, security/observability/reliability design
-- `docs/notification-svc/progress-tracking.md` — 7 epics, 48 tasks (most ✅), 10 tech debt items (TD-01–TD-10)
-- `docs/notification-svc/review.md` — FR compliance (16/17 pass, FR-02 partial — stubs), NFR (3 unverified: latency/throughput), 10 TD items, immediate/short/medium recommendations
+- `services/notification-svc/docs/goals.md` — 17 FR, 9 NFR, 10 constraints, 17 acceptance criteria, service boundaries
+- `services/notification-svc/docs/context.md` — domain overview, bounded context diagram, 6 business workflows, actor table, risk register, upstream/downstream systems
+- `services/notification-svc/docs/architecture.md` — Mermaid diagrams (high-level + sequence), layering rules, package tree, SQL DDL for 3 tables, full API table, security/observability/reliability design
+- `services/notification-svc/docs/progress-tracking.md` — 7 epics, 48 tasks (most ✅), 10 tech debt items (TD-01–TD-10)
+- `services/notification-svc/docs/review.md` — FR compliance (16/17 pass, FR-02 partial — stubs), NFR (3 unverified: latency/throughput), 10 TD items, immediate/short/medium recommendations
 - Key gaps: EMAIL/SMS/PUSH/WHATSAPP are stubs (TD-01–TD-04); no integration tests; scheduler not distributed (TD-06); no retry backoff (TD-05)
+- Note (2026-07-10): a stale shell-doc duplicate (`docs/notification-svc/*`, older/unfilled) existed alongside this set from an earlier scaffold pass; discarded during the docs/ → services/{name}/docs/ move — `services/notification-svc/docs/*` is the sole surviving, authoritative copy.
 
 ### account-svc
 
-- `docs/account-svc/{goals,context,architecture,progress-tracking,review}.md` — scaffolded stubs (2026-07-10), live service, delivery-framework pass not yet run
+- `services/account-svc/docs/{goals,context,architecture,progress-tracking,review}.md` — scaffolded stubs (2026-07-10), live service, delivery-framework pass not yet run
 
 ---
 
 ## Session 2026-06-16 — Documentation & Skills
 
-- Created `docs/` with full auth-svc reverse-engineering documentation:
-  - `docs/auth-svc/goals.md` — business objectives, FR/NFR/constraints, acceptance criteria
-  - `docs/auth-svc/context.md` — domain overview, bounded context, actors, workflows, system integrations
-  - `docs/auth-svc/architecture.md` — Mermaid diagrams, component design, API, storage DDL, security/observability design
-  - `docs/auth-svc/progress-tracking.md` — epics, tasks with current status, blocker table, tech debt register
-  - `docs/auth-svc/review.md` — requirement compliance (24/24 FR pass), architecture compliance, security posture, recommendations
+- Created `docs/` with full auth-svc reverse-engineering documentation (now `services/auth-svc/docs/`):
+  - `services/auth-svc/docs/goals.md` — business objectives, FR/NFR/constraints, acceptance criteria
+  - `services/auth-svc/docs/context.md` — domain overview, bounded context, actors, workflows, system integrations
+  - `services/auth-svc/docs/architecture.md` — Mermaid diagrams, component design, API, storage DDL, security/observability design
+  - `services/auth-svc/docs/progress-tracking.md` — epics, tasks with current status, blocker table, tech debt register
+  - `services/auth-svc/docs/review.md` — requirement compliance (24/24 FR pass), architecture compliance, security posture, recommendations
 - Created `skills/` with three reusable engineering methodology documents:
   - `skills/backend-delivery-framework.md` — documentation lifecycle, traceability rules, delivery workflow, engineering governance
   - `skills/microservice-standards.md` — folder structure, layering, naming, error handling, testing standards
