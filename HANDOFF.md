@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-07-06 (Error handling unification + dead infra cleanup)
+> Last updated: 2026-07-14 (kyc-svc goals.md written)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -235,6 +235,16 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 ### account-svc
 
 - `services/account-svc/docs/{goals,context,architecture,progress-tracking,review}.md` — scaffolded stubs (2026-07-10), live service, delivery-framework pass not yet run
+
+### kyc-svc (port 8084 — 5-doc lifecycle complete, implementation ready to start)
+
+- **New service** for customer identity verification (KTP OCR extraction + scoring). Designed to be extractable into standalone external product later.
+- `services/kyc-svc/CONTEXT.md` — domain overview, verification types (ktp_ocr v1), outcome states, language glossary, 9 v1 fields
+- `services/kyc-svc/docs/adr/` — 3 architecture decision records (self-contained auth+audit, MinIO+PII retention, sidecar OCR engines)
+- `services/kyc-svc/goals.md` — **✅ complete (2026-07-14)**: 5 BO, 19 FR, 21 NFR, 8 constraints, 7 assumptions, 24 acceptance criteria
+- `services/kyc-svc/architecture.md` — **✅ complete (2026-07-14)**: high-level diagram, layering model, 19 components, 3-table schema (verifications, api_keys, audit_log), MinIO design, API contract (POST /v1/verify), Prometheus/Jaeger instrumentation, security threat model, scalability/reliability considerations
+- `services/kyc-svc/progress-tracking.md` — **✅ complete (2026-07-14)**: 8 epics (E1–E8, 60+ tasks), critical path (E1 auth → E2 verification → E3 storage → E4 API → E5 lifecycle), 8 tech debt items, 3 blockers (E7 dataset, E5 webhook auth, MinIO deployment), timeline 2026-07-15 through 2026-08-15 (est.)
+- **Next:** architecture review, assign epic owners, kick off E1 (auth) + E3 (storage) in parallel, run E7 benchmark concurrently with E2 (verification logic)
 
 ---
 
