@@ -1,0 +1,7 @@
+# Sidecar-based OCR engines (Python/ML) in addition to Go-native options
+
+The free/open-source OCR engine landscape splits along language lines: Go-native options are limited (essentially Tesseract via `gosseract` cgo bindings), while Python-based engines (PaddleOCR, docTR, EasyOCR) consistently score higher on structured-document accuracy benchmarks like photographed ID cards. Restricting the offline benchmark to Go-native-only would cap production accuracy at Tesseract's level, which would undercut the entire point of comparing engines — we'd be choosing based on implementation convenience rather than accuracy.
+
+We decided to allow the offline benchmark to compare both Go-native (Tesseract) and sidecar-based Python engines (PaddleOCR, docTR, etc.), running the non-Go engines in a small private sidecar container (e.g. a Flask/FastAPI wrapper around PaddleOCR) that `kyc-svc` calls over localhost HTTP/gRPC. The engine interface (Q3, [ADR 0001](./0001-self-contained-auth-and-audit.md)) abstracts away whether the winning engine is in-process (cgo) or a local sidecar call — callers never know or care. If the benchmark determines that Tesseract is accurate enough, production runs pure-Go. If PaddleOCR wins, production also runs the sidecar, deployed together.
+
+This introduces a non-Go runtime (Python) into an otherwise pure-Go platform for the first time, which is a real platform-level precedent. The trade-off is accuracy (Python OCR engines are demonstrably better on ID documents) vs. deployment simplicity and cross-language operational burden.
