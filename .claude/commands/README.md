@@ -1,16 +1,38 @@
 # Project Slash Commands
 
-This project provides three engineering slash commands for Claude Code. Type `/` in the Claude Code prompt to autocomplete.
+This project provides engineering slash commands for Claude Code. Type `/` in the Claude Code prompt to autocomplete.
 
 ## Available Commands
 
 | Command | Purpose | When to Use |
 |---|---|---|
+| `/feature-workflow` | End-to-end pipeline: requirement → 5 docs → build → review/PR | Delivering one feature/service change start to finish, automatically |
 | `/eng-delivery` | 5-document delivery framework | Starting a new service, reverse-engineering docs, post-delivery review |
 | `/eng-standards` | Microservice coding standards | Building/reviewing service code, checking conventions, onboarding |
 | `/eng-observability` | Monitoring & observability standards | Adding metrics/logs/traces, setting up alerts, operational readiness |
 
 ## Usage
+
+### `/feature-workflow`
+
+Runs the whole delivery pipeline for one feature/service change, sequencing the other
+commands instead of ad-hoc-ing each stage:
+
+```
+Stage 0  Intake       — restate requirement, confirm scope
+Stage 1  Research     — produce/update the 5 docs in services/{name}/docs/ (via /eng-delivery)
+Stage 2  Build        — code + unit tests + observability per architecture.md (via /eng-standards, /eng-observability)
+Stage 3  Review       — tests/lint, commit, PR (with your go-ahead), /code-review + /security-review, fold findings into review.md
+```
+
+Stops for your confirmation before Stage 2 (architecture is expensive to unwind after
+code exists) and before opening any PR.
+
+**Example prompt:**
+```
+/feature-workflow payment-svc
+Add idempotent refund processing with a 24h dedupe window.
+```
 
 ### `/eng-delivery`
 
