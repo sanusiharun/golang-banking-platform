@@ -25,10 +25,10 @@ type claimsKey struct{}
 //     Callers should always read UserID, never Subject directly.
 //   - TenantID and Roles travel as custom claims inside the token.
 type Claims struct {
-	jwt.RegisteredClaims            // Subject = AES-256-GCM encrypted user ID
-	UserID   string `json:"-"`      // decrypted user ID — set by middleware, not in JWT
-	TenantID string `json:"tenant_id"`
-	Roles    []string `json:"roles"`
+	jwt.RegisteredClaims          // Subject = AES-256-GCM encrypted user ID
+	UserID               string   `json:"-"` // decrypted user ID — set by middleware, not in JWT
+	TenantID             string   `json:"tenant_id"`
+	Roles                []string `json:"roles"`
 }
 
 // JWTConfig holds JWT validation parameters for RS256.
@@ -36,7 +36,7 @@ type JWTConfig struct {
 	PublicKey  *rsa.PublicKey
 	Issuer     string
 	SubjectKey []byte // AES-256 key (32 bytes) for decrypting Subject claim.
-	            	   // If empty, Subject is used as-is (no encryption).
+	// If empty, Subject is used as-is (no encryption).
 }
 
 // Authenticate validates a Bearer token using RS256 and injects Claims into context.
@@ -150,4 +150,3 @@ func extractBearer(r *http.Request) string {
 	}
 	return strings.TrimSpace(parts[1])
 }
-

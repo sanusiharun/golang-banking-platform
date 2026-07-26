@@ -45,6 +45,6 @@ func newUUID() string {
 // RequestIDFromContext retrieves the request ID injected by the RequestID middleware.
 // Returns an empty string if none is present.
 func RequestIDFromContext(ctx context.Context) string {
-	id, _ := ctx.Value(httpx.RequestIDKey).(string)
+	id, _ := ctx.Value(httpx.RequestIDKey).(string) //nolint:errcheck // empty string is a valid, intentional fallback when no request ID was injected
 	return id
 }

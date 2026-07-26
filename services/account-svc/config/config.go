@@ -49,10 +49,10 @@ type Config struct {
 	JWTSubjectKeyB64 string // base64-encoded AES-256 key for decrypting Subject claim
 
 	// Rate limiting
-	RateLimitRPS   int
+	RateLimitRPS int
 
 	// Feature flags — optional, returns defaults if empty or unreachable
-	FliptURL   string
+	FliptURL string
 
 	// Redis — optional, used as a read-through cache for API key lookups.
 	// If empty or unreachable, API key auth falls back to HTTP introspect on auth-svc.
@@ -60,7 +60,7 @@ type Config struct {
 	RedisPassword string // empty = no password
 
 	// Downstream service URLs
-	AuthSvcURL string // e.g. http://localhost:8080
+	AuthSvcURL     string // e.g. http://localhost:8080
 	RateLimitBurst int
 
 	// NATS — optional, used for async audit event publishing.
@@ -69,7 +69,7 @@ type Config struct {
 
 	// Observability
 	OTelEnabled      bool
-	OTelLogsEnabled  bool   // false for Jaeger; true only for backends that support OTLP logs
+	OTelLogsEnabled  bool // false for Jaeger; true only for backends that support OTLP logs
 	OTelEndpoint     string
 	OTelSamplingRate float64
 }
@@ -80,7 +80,7 @@ type Config struct {
 // Returns an error immediately if any required field is missing.
 func Load() (*Config, error) {
 	// Auto-load .env for local development. Silently ignored if file is absent.
-	_ = loadDotEnv(".env")
+	_ = loadDotEnv(".env") //nolint:errcheck // .env is optional in production; missing file is not an error
 	// Resolve environment first so LOG_FORMAT default can depend on it.
 	environment := getEnv("ENVIRONMENT", "local")
 
@@ -235,7 +235,7 @@ func loadDotEnv(filename string) error {
 			}
 		}
 		if key != "" && os.Getenv(key) == "" {
-			_ = os.Setenv(key, val)
+			_ = os.Setenv(key, val) //nolint:errcheck // os.Setenv only fails on empty key, already guarded above
 		}
 	}
 	return nil

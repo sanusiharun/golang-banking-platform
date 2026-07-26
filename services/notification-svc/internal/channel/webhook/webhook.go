@@ -50,7 +50,7 @@ func (p *Provider) Send(ctx context.Context, req *channel.SendRequest) (*channel
 	if err != nil {
 		return nil, fmt.Errorf("webhook: http post: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // closing a response body we only read from; nothing to do on failure
 
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("webhook: recipient returned %d", resp.StatusCode)

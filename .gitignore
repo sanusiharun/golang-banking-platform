@@ -66,3 +66,4 @@ skills-lock.json
 
 # Agents directory (tooling state, not source)
 .agents/
+graphify-out/

@@ -71,7 +71,7 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAccountCreated,
@@ -136,7 +136,7 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAccountBalanceRead,
@@ -184,7 +184,7 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAccountCredit,
@@ -233,7 +233,7 @@ func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := middleware.UserIDFromContext(ctx)
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAccountDebit,

@@ -46,6 +46,38 @@ type debitCreditInput struct {
 	InitiatedBy       string
 }
 
+// createPendingTransaction persists a new PENDING transaction for in. If a
+// concurrent request already won the race for the same idempotency key
+// (unique constraint violation), it returns that other transaction instead,
+// with wonRace == false, signaling the caller must not proceed to move funds.
+func (o *orchestrator) createPendingTransaction(ctx context.Context, in debitCreditInput) (txn *dao.Transaction, wonRace bool, err error) {
+	txn = &dao.Transaction{
+		IdempotencyKey:       in.IdempotencyKey,
+		PaymentType:          in.PaymentType,
+		Channel:              in.Channel,
+		SourceAccountID:      in.SourceAccountID,
+		DestinationAccountID: in.DestAccountID,
+		Amount:               in.Amount,
+		Currency:             in.Currency,
+		Status:               dto.StatusPending,
+		InitiatedBy:          in.InitiatedBy,
+	}
+	if in.Description != "" {
+		txn.Description = &in.Description
+	}
+	if in.ExternalReference != "" {
+		txn.ExternalReference = &in.ExternalReference
+	}
+	if err := o.repo.Create(ctx, txn); err != nil {
+		// A concurrent request with the same key may have won the race.
+		if existing, e2 := o.repo.GetByIdempotencyKey(ctx, in.IdempotencyKey); e2 == nil {
+			return existing, false, nil
+		}
+		return nil, false, fmt.Errorf("orchestrator.executeDebitCredit create: %w", err)
+	}
+	return txn, true, nil
+}
+
 // executeDebitCredit performs the money movement and returns the persisted
 // transaction in its terminal state.
 //
@@ -77,29 +109,14 @@ func (o *orchestrator) executeDebitCredit(ctx context.Context, in debitCreditInp
 	}
 
 	// ── Persist PENDING ───────────────────────────────────────────────────────
-	txn := &dao.Transaction{
-		IdempotencyKey:       in.IdempotencyKey,
-		PaymentType:          in.PaymentType,
-		Channel:              in.Channel,
-		SourceAccountID:      in.SourceAccountID,
-		DestinationAccountID: in.DestAccountID,
-		Amount:               in.Amount,
-		Currency:             in.Currency,
-		Status:               dto.StatusPending,
-		InitiatedBy:          in.InitiatedBy,
+	txn, wonRace, err := o.createPendingTransaction(ctx, in)
+	if err != nil {
+		return nil, err
 	}
-	if in.Description != "" {
-		txn.Description = &in.Description
-	}
-	if in.ExternalReference != "" {
-		txn.ExternalReference = &in.ExternalReference
-	}
-	if err := o.repo.Create(ctx, txn); err != nil {
-		// A concurrent request with the same key may have won the race.
-		if existing, e2 := o.repo.GetByIdempotencyKey(ctx, in.IdempotencyKey); e2 == nil {
-			return existing, nil
-		}
-		return nil, fmt.Errorf("orchestrator.executeDebitCredit create: %w", err)
+	if !wonRace {
+		// A concurrent request with the same key already completed/is completing;
+		// txn here is that other request's record, returned as a safe replay.
+		return txn, nil
 	}
 
 	// ── Debit source ──────────────────────────────────────────────────────────

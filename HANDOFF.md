@@ -334,6 +334,7 @@ go test -run TestLogin_Success ./services/auth-svc/tests/unit
 
 - [ ] **Run audit DB migration** — `04_setup_banking_audits.sql` + `001_create_audit_events.up.sql`
 - [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist (currently relies on Docker network isolation only)
+- [ ] **chi RealIP IP-spoofing (all 5 services)** — `chimiddleware.RealIP` trusts `X-Forwarded-For`/`X-Real-IP` unconditionally (GHSA-3fxj-6jh8-hvhx); since every service is also directly reachable on its own port (not just via Traefik), a caller can forge these headers when hitting a service directly. Needs a trusted-proxy-scoped IP resolver (only trust the header when the immediate peer is Traefik's known address) instead of chi's unconditional `RealIP`. Currently `//nolint:staticcheck`-suppressed with this note in each `routes.go`/`router.go`, not silently ignored.
 - [ ] **Logout ActorID** — logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`
 - [ ] **API key cache warm-up** — pre-populate Redis on auth-svc startup to avoid cold-start miss under load
 - [ ] **payment-svc E4 (service layer)** — `InitiateRefund` done; implement `InitiateTransfer`, `InitiateMerchantPayment`, `InitiateFee`, `Reverse`, `Cancel`, `Retry` in `internal/service/`; handlers already wired, just need the service logic

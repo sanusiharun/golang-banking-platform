@@ -14,11 +14,11 @@ import (
 // Base holds common configuration shared by all services.
 type Base struct {
 	// Server
-	HTTPPort    int           `env:"HTTP_PORT"    default:"8080"`
-	MetricsPort int           `env:"METRICS_PORT" default:"9090"`
-	ReadTimeout  time.Duration `env:"READ_TIMEOUT"  default:"30s"`
-	WriteTimeout time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
-	IdleTimeout  time.Duration `env:"IDLE_TIMEOUT"  default:"120s"`
+	HTTPPort        int           `env:"HTTP_PORT"    default:"8080"`
+	MetricsPort     int           `env:"METRICS_PORT" default:"9090"`
+	ReadTimeout     time.Duration `env:"READ_TIMEOUT"  default:"30s"`
+	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" default:"30s"`
+	IdleTimeout     time.Duration `env:"IDLE_TIMEOUT"  default:"120s"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" default:"30s"`
 
 	// Logging
@@ -36,9 +36,9 @@ type Base struct {
 	DBMinConns int    `env:"DB_MIN_CONNS" default:"5"`
 
 	// OTel
-	OTelEnabled      bool   `env:"OTEL_ENABLED"       default:"false"`
-	OTelEndpoint     string `env:"OTEL_ENDPOINT"      default:"localhost:4317"`
-	OTelServiceName  string `env:"OTEL_SERVICE_NAME"  default:"banking-service"`
+	OTelEnabled      bool    `env:"OTEL_ENABLED"       default:"false"`
+	OTelEndpoint     string  `env:"OTEL_ENDPOINT"      default:"localhost:4317"`
+	OTelServiceName  string  `env:"OTEL_SERVICE_NAME"  default:"banking-service"`
 	OTelSamplingRate float64 `env:"OTEL_SAMPLING_RATE" default:"1.0"`
 
 	// JWT

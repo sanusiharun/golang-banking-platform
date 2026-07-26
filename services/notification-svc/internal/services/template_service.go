@@ -54,7 +54,7 @@ func (s *templateService) Create(ctx context.Context, req *dto.CreateTemplateReq
 	)
 	defer s.tr.Finish(span, &err)
 
-	varsJSON, _ := json.Marshal(req.Variables)
+	varsJSON, _ := json.Marshal(req.Variables) //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
 	t := &dao.Template{
 		ID:        uuid.New().String(),
 		Code:      req.Code,
@@ -93,7 +93,7 @@ func (s *templateService) Update(ctx context.Context, id string, req *dto.Update
 		return nil, fmt.Errorf("template_service.Update: get: %w", err)
 	}
 
-	varsJSON, _ := json.Marshal(req.Variables)
+	varsJSON, _ := json.Marshal(req.Variables) //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
 	t.Name = req.Name
 	t.Subject = req.Subject
 	t.Body = req.Body
@@ -223,7 +223,7 @@ func toTemplateResponse(t *dao.Template) *dto.TemplateResponse {
 		UpdatedAt: t.UpdatedAt,
 	}
 	if len(t.Variables) > 0 {
-		_ = json.Unmarshal(t.Variables, &r.Variables)
+		_ = json.Unmarshal(t.Variables, &r.Variables) //nolint:errcheck // best-effort decode of a stored jsonb column for display; a decode failure just leaves the field empty
 	}
 	return r
 }

@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
+	"database/sql"
+
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"database/sql"
 
-	"github.com/sanusi/banking/services/account-svc/migrations"
 	svcconfig "github.com/sanusi/banking/services/account-svc/config"
+	"github.com/sanusi/banking/services/account-svc/migrations"
 )
 
 // runMigrations applies all pending SQL migrations from the embedded FS.
@@ -28,7 +29,7 @@ func runMigrations(cfg *svcconfig.Config) error {
 	if err != nil {
 		return fmt.Errorf("open db for migrations: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck // closing a short-lived migration DB connection on process exit
 
 	src, err := iofs.New(migrations.FS, ".")
 	if err != nil {
@@ -44,7 +45,7 @@ func runMigrations(cfg *svcconfig.Config) error {
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
-	defer m.Close()
+	defer m.Close() //nolint:errcheck // closing the migrator after Up() has already returned its result
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		return fmt.Errorf("apply migrations: %w", err)

@@ -1,10 +1,10 @@
 // Command server is the entrypoint for account-svc.
 // Responsibilities:
-//   1. Load config (fail fast on missing required vars)
-//   2. Configure the global slog logger — must happen before any other init
-//   3. Build the dependency container
-//   4. Start the HTTP server
-//   5. Graceful shutdown on SIGTERM / SIGINT
+//  1. Load config (fail fast on missing required vars)
+//  2. Configure the global slog logger — must happen before any other init
+//  3. Build the dependency container
+//  4. Start the HTTP server
+//  5. Graceful shutdown on SIGTERM / SIGINT
 package main
 
 import (
@@ -111,7 +111,7 @@ func run() error {
 			slog.Error("otel shutdown", slog.String("error", err.Error()))
 		}
 		if c.nc != nil {
-			_ = c.nc.Drain() // flush pending audit publishes before exit
+			_ = c.nc.Drain() //nolint:errcheck // best-effort flush during shutdown; process is exiting regardless
 		}
 	}()
 

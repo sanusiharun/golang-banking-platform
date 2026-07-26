@@ -35,7 +35,7 @@ type container struct {
 	server           *http.Server
 	otel             *observability.Provider
 	idempotencyStore *idempotencyCleanupStore // nil when Postgres store is unavailable
-	nc               *nats.Conn              // nil when NATS is not configured
+	nc               *nats.Conn               // nil when NATS is not configured
 }
 
 func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
@@ -71,8 +71,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Migrations ────────────────────────────────────────────────────────────
-	if err := runMigrations(cfg); err != nil {
-		return nil, fmt.Errorf("run migrations: %w", err)
+	if migrateErr := runMigrations(cfg); migrateErr != nil {
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
@@ -95,7 +95,7 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	tokenStore, redisClient := buildTokenStore(cfg, db)
 
 	// ── API Key store (postgres + optional redis cache) ────────────────────────
-	apiKeyStore, saStore := buildAPIKeyStore(cfg, db, redisClient)
+	apiKeyStore, saStore := buildAPIKeyStore(db, redisClient)
 
 	// ── Wiring ────────────────────────────────────────────────────────────────
 	userRepo := repository.NewUserRepository(db)
@@ -175,7 +175,7 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 
 // buildAPIKeyStore wires the API key and service account stores.
 // When Redis is available, the API key store is wrapped with a Redis cache layer.
-func buildAPIKeyStore(cfg *svcconfig.Config, db *gorm.DB, redisClient *redis.Client) (repository.APIKeyStore, repository.ServiceAccountStore) {
+func buildAPIKeyStore(db *gorm.DB, redisClient *redis.Client) (repository.APIKeyStore, repository.ServiceAccountStore) {
 	saStore := repository.NewPostgresServiceAccountStore(db)
 	pgKeyStore := repository.NewPostgresAPIKeyStore(db)
 

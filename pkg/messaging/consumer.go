@@ -2,6 +2,7 @@ package messaging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -85,7 +86,7 @@ func (c *NATSConsumer) Start(ctx context.Context, handler Handler) {
 
 		msgs, err := sub.Fetch(c.cfg.BatchSize, nats.MaxWait(c.cfg.MaxWait))
 		if err != nil {
-			if err == nats.ErrTimeout {
+			if errors.Is(err, nats.ErrTimeout) {
 				continue
 			}
 			slog.Error("messaging: fetch error",
@@ -101,9 +102,9 @@ func (c *NATSConsumer) Start(ctx context.Context, handler Handler) {
 					slog.String("subject", msg.Subject),
 					slog.String("error", err.Error()),
 				)
-				_ = msg.Nak()
+				_ = msg.Nak() //nolint:errcheck // best-effort NAK; message will be redelivered by NATS on timeout regardless
 			} else {
-				_ = msg.Ack()
+				_ = msg.Ack() //nolint:errcheck // best-effort ACK; a failed ACK just triggers a harmless redelivery
 			}
 		}
 	}

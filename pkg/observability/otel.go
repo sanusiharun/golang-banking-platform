@@ -76,12 +76,12 @@ func Bootstrap(ctx context.Context, cfg Config) (*Provider, error) {
 	}
 
 	if cfg.Enabled && cfg.OTLPEndpoint != "" {
-		traceExporter, err := otlptracegrpc.New(ctx,
+		traceExporter, traceErr := otlptracegrpc.New(ctx,
 			otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
 			otlptracegrpc.WithInsecure(),
 		)
-		if err != nil {
-			return nil, fmt.Errorf("create OTLP trace exporter: %w", err)
+		if traceErr != nil {
+			return nil, fmt.Errorf("create OTLP trace exporter: %w", traceErr)
 		}
 		traceOpts = append(traceOpts,
 			sdktrace.WithBatcher(traceExporter,

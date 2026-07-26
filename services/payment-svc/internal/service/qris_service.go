@@ -199,66 +199,87 @@ func (s *qrisService) Decode(_ context.Context, qrString string) (*dto.QRISDecod
 
 // ── QR payment ────────────────────────────────────────────────────────────────
 
-func (s *qrisService) Pay(ctx context.Context, idempotencyKey string, req *dto.QRISPayRequest, initiatedBy string) (*dto.TransactionResponse, error) {
-	var (
-		merchant *dao.Merchant
-		amount   int64
-		charge   *dao.QRISCharge
-		extRef   string
-		err      error
-	)
+// paymentResolution is the outcome of resolving a QRIS Pay request into the
+// merchant/amount/reference needed for the actual debit/credit, or an early
+// response (a safe replay) that must be returned to the caller unchanged.
+type paymentResolution struct {
+	merchant      *dao.Merchant
+	amount        int64
+	extRef        string
+	charge        *dao.QRISCharge          // non-nil only for a charge-based payment
+	earlyResponse *dto.TransactionResponse // non-nil: return this directly, skip debit/credit
+}
 
+// resolveChargePayment resolves a payment made against a pre-generated QRIS charge.
+func (s *qrisService) resolveChargePayment(ctx context.Context, req *dto.QRISPayRequest, idempotencyKey string) (paymentResolution, error) {
+	charge, err := s.charges.GetByID(ctx, req.ChargeID)
+	if err != nil {
+		return paymentResolution{}, fmt.Errorf("qris_service.Pay charge: %w", err)
+	}
+	// Reject a second distinct settlement of the same charge, but allow the
+	// original payer to replay their own request idempotently.
+	if charge.Status != dto.QRISChargePending {
+		if replay := s.replayForCharge(ctx, charge, idempotencyKey); replay != nil {
+			return paymentResolution{earlyResponse: replay}, nil
+		}
+		return paymentResolution{}, pkgerrors.Conflict("qris_charge", "status", "already settled")
+	}
+	merchant, err := s.merchants.GetByID(ctx, charge.MerchantID)
+	if err != nil {
+		return paymentResolution{}, fmt.Errorf("qris_service.Pay merchant: %w", err)
+	}
+	amount, err := amountForCharge(charge, req.Amount)
+	if err != nil {
+		return paymentResolution{}, err
+	}
+	return paymentResolution{merchant: merchant, amount: amount, extRef: charge.ID, charge: charge}, nil
+}
+
+// resolveQRStringPayment resolves a payment made by scanning a raw QRIS string.
+func (s *qrisService) resolveQRStringPayment(ctx context.Context, req *dto.QRISPayRequest) (paymentResolution, error) {
+	p, derr := qris.Decode(req.QRString)
+	if derr != nil {
+		return paymentResolution{}, pkgerrors.Validation("qr_string", "malformed QRIS payload")
+	}
+	if !p.CRCValid {
+		return paymentResolution{}, pkgerrors.Validation("qr_string", "invalid QRIS checksum")
+	}
+	merchant, err := s.merchants.GetByNMID(ctx, p.MerchantNMID)
+	if err != nil {
+		return paymentResolution{}, fmt.Errorf("qris_service.Pay merchant: %w", err)
+	}
+	amount, err := amountForDecoded(p, req.Amount)
+	if err != nil {
+		return paymentResolution{}, err
+	}
+	return paymentResolution{merchant: merchant, amount: amount, extRef: p.MerchantNMID}, nil
+}
+
+func (s *qrisService) Pay(ctx context.Context, idempotencyKey string, req *dto.QRISPayRequest, initiatedBy string) (*dto.TransactionResponse, error) {
+	var resolution paymentResolution
+	var err error
 	if req.ChargeID != "" {
-		charge, err = s.charges.GetByID(ctx, req.ChargeID)
-		if err != nil {
-			return nil, fmt.Errorf("qris_service.Pay charge: %w", err)
-		}
-		// Reject a second distinct settlement of the same charge, but allow the
-		// original payer to replay their own request idempotently.
-		if charge.Status != dto.QRISChargePending {
-			if replay := s.replayForCharge(ctx, charge, idempotencyKey); replay != nil {
-				return replay, nil
-			}
-			return nil, pkgerrors.Conflict("qris_charge", "status", "already settled")
-		}
-		merchant, err = s.merchants.GetByID(ctx, charge.MerchantID)
-		if err != nil {
-			return nil, fmt.Errorf("qris_service.Pay merchant: %w", err)
-		}
-		amount, err = amountForCharge(charge, req.Amount)
-		if err != nil {
-			return nil, err
-		}
-		extRef = charge.ID
+		resolution, err = s.resolveChargePayment(ctx, req, idempotencyKey)
 	} else {
-		p, derr := qris.Decode(req.QRString)
-		if derr != nil {
-			return nil, pkgerrors.Validation("qr_string", "malformed QRIS payload")
-		}
-		if !p.CRCValid {
-			return nil, pkgerrors.Validation("qr_string", "invalid QRIS checksum")
-		}
-		merchant, err = s.merchants.GetByNMID(ctx, p.MerchantNMID)
-		if err != nil {
-			return nil, fmt.Errorf("qris_service.Pay merchant: %w", err)
-		}
-		amount, err = amountForDecoded(p, req.Amount)
-		if err != nil {
-			return nil, err
-		}
-		extRef = p.MerchantNMID
+		resolution, err = s.resolveQRStringPayment(ctx, req)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if resolution.earlyResponse != nil {
+		return resolution.earlyResponse, nil
 	}
 
 	txn, err := s.orch.executeDebitCredit(ctx, debitCreditInput{
 		IdempotencyKey:    idempotencyKey,
 		SourceAccountID:   req.SourceAccountID,
-		DestAccountID:     merchant.AccountID,
-		Amount:            amount,
-		Currency:          merchant.Currency,
+		DestAccountID:     resolution.merchant.AccountID,
+		Amount:            resolution.amount,
+		Currency:          resolution.merchant.Currency,
 		PaymentType:       dto.TypeQRIS,
 		Channel:           dto.ChannelQRIS,
 		Description:       req.Description,
-		ExternalReference: extRef,
+		ExternalReference: resolution.extRef,
 		InitiatedBy:       initiatedBy,
 	})
 	if err != nil {
@@ -267,8 +288,8 @@ func (s *qrisService) Pay(ctx context.Context, idempotencyKey string, req *dto.Q
 
 	// Settle the charge (PENDING → PAID). The repo guards on PENDING, so a
 	// concurrent/replayed settlement is a harmless no-op we can ignore.
-	if charge != nil && txn.Status == dto.StatusSuccess {
-		if merr := s.charges.MarkPaid(ctx, charge.ID, txn.ID); merr != nil && !pkgerrors.IsConflict(merr) {
+	if resolution.charge != nil && txn.Status == dto.StatusSuccess {
+		if merr := s.charges.MarkPaid(ctx, resolution.charge.ID, txn.ID); merr != nil && !pkgerrors.IsConflict(merr) {
 			return nil, fmt.Errorf("qris_service.Pay mark paid: %w", merr)
 		}
 	}
@@ -386,7 +407,7 @@ func generateNMID() string {
 	var sb strings.Builder
 	sb.WriteString("9360") // simulated acquirer prefix
 	for i := 0; i < 11; i++ {
-		n, _ := rand.Int(rand.Reader, big.NewInt(10))
+		n, _ := rand.Int(rand.Reader, big.NewInt(10)) //nolint:errcheck // crypto/rand.Reader failure is a fatal system-entropy condition, not something this simulated-merchant-ID generator can meaningfully recover from
 		sb.WriteString(n.String())
 	}
 	return sb.String()

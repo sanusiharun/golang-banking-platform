@@ -65,7 +65,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		observability.RecordError(ctx, err)
 		if errors.Is(err, services.ErrInvalidCredentials) {
-			_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+			_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 				ActorType:   pkgaudit.ActorTypeUser,
 				ActorID:     req.Username,
 				ActorEmail:  req.Username,
@@ -83,7 +83,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     resp.UserID,
 		ActorEmail:  req.Username,
@@ -126,7 +126,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     resp.UserID,
 		Action:      pkgaudit.ActionAuthTokenRefresh,
@@ -163,7 +163,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     req.RefreshToken,
 		Action:      pkgaudit.ActionAuthLogout,

@@ -61,16 +61,16 @@ func (s *schedulerService) Create(ctx context.Context, req *dto.CreateScheduleRe
 
 	var nextRunAt *time.Time
 	if req.Recurring {
-		t, err := computeNextRun(req.CronExpr, time.Now().UTC())
-		if err != nil {
-			return nil, pkgerrors.Validation("cron_expr", fmt.Sprintf("invalid: %s", err))
+		t, cronErr := computeNextRun(req.CronExpr, time.Now().UTC())
+		if cronErr != nil {
+			return nil, pkgerrors.Validation("cron_expr", fmt.Sprintf("invalid: %s", cronErr))
 		}
 		nextRunAt = &t
 	} else {
 		nextRunAt = req.ScheduledAt
 	}
 
-	varsJSON, _ := json.Marshal(req.TemplateVars)
+	varsJSON, _ := json.Marshal(req.TemplateVars) //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
 	schedule := &dao.Schedule{
 		ID:           uuid.New().String(),
 		Name:         req.Name,
@@ -125,7 +125,7 @@ func (s *schedulerService) Update(ctx context.Context, id string, req *dto.Updat
 		existing.Recipient = req.Recipient
 	}
 	if req.TemplateVars != nil {
-		existing.TemplateVars, _ = json.Marshal(req.TemplateVars)
+		existing.TemplateVars, _ = json.Marshal(req.TemplateVars) //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
 	}
 	if req.CronExpr != "" {
 		t, parseErr := computeNextRun(req.CronExpr, time.Now().UTC())
@@ -264,7 +264,7 @@ func toScheduleResponse(s *dao.Schedule) *dto.ScheduleResponse {
 		r.CronExpr = s.CronExpr.String
 	}
 	if len(s.TemplateVars) > 0 {
-		_ = json.Unmarshal(s.TemplateVars, &r.TemplateVars)
+		_ = json.Unmarshal(s.TemplateVars, &r.TemplateVars) //nolint:errcheck // best-effort decode of a stored jsonb column for display; a decode failure just leaves the field empty
 	}
 	return r
 }

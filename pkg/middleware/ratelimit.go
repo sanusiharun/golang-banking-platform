@@ -34,11 +34,11 @@ func (tb *tokenBucket) allow() bool {
 
 // RateLimiter holds per-key token buckets.
 type RateLimiter struct {
-	mu         sync.Mutex
-	buckets    map[string]*tokenBucket
-	maxTokens  float64
-	refillRate float64
-	cleanupAge time.Duration
+	mu          sync.Mutex
+	buckets     map[string]*tokenBucket
+	maxTokens   float64
+	refillRate  float64
+	cleanupAge  time.Duration
 	lastCleanup time.Time
 }
 

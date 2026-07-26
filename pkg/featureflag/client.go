@@ -130,7 +130,7 @@ func (c *Client) evaluateBool(ctx context.Context, flagKey string) (bool, error)
 	if err != nil {
 		return false, fmt.Errorf("flipt unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // closing a response body we only read from; nothing to do on failure
 	if resp.StatusCode == http.StatusNotFound {
 		return false, fmt.Errorf("flag %q not found", flagKey)
 	}
@@ -148,7 +148,7 @@ func (c *Client) evaluateBool(ctx context.Context, flagKey string) (bool, error)
 
 func (c *Client) evaluateVariant(ctx context.Context, flagKey string) (string, error) {
 	url := fmt.Sprintf("%s/evaluate/v1/variant", c.baseURL)
-	body, _ := json.Marshal(map[string]any{
+	body, _ := json.Marshal(map[string]any{ //nolint:errcheck // marshaling a static map of known-serializable values cannot fail
 		"namespace_key": c.namespace,
 		"flag_key":      flagKey,
 		"entity_id":     "system",
@@ -163,7 +163,7 @@ func (c *Client) evaluateVariant(ctx context.Context, flagKey string) (string, e
 	if err != nil {
 		return "", fmt.Errorf("flipt unreachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck // closing a response body we only read from; nothing to do on failure
 	if resp.StatusCode == http.StatusNotFound {
 		return "", fmt.Errorf("flag %q not found", flagKey)
 	}

@@ -87,7 +87,7 @@ func run() error {
 			slog.Error("otel shutdown", slog.String("error", err.Error()))
 		}
 		if c.nc != nil {
-			_ = c.nc.Drain() // flush pending audit publishes before exit
+			_ = c.nc.Drain() //nolint:errcheck // best-effort flush during shutdown; process is exiting regardless
 		}
 	}()
 

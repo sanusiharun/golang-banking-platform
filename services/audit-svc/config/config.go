@@ -64,7 +64,7 @@ type Config struct {
 
 // Load reads config from environment variables (and .env if present).
 func Load() (*Config, error) {
-	_ = loadDotEnv(".env")
+	_ = loadDotEnv(".env") //nolint:errcheck // .env is optional in production; missing file is not an error
 	environment := getEnv("ENVIRONMENT", "local")
 
 	cfg := &Config{
@@ -202,7 +202,7 @@ func loadDotEnv(filename string) error {
 			}
 		}
 		if key != "" && os.Getenv(key) == "" {
-			_ = os.Setenv(key, val)
+			_ = os.Setenv(key, val) //nolint:errcheck // os.Setenv only fails on empty key, already guarded above
 		}
 	}
 	return nil

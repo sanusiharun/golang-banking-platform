@@ -13,7 +13,7 @@ type APIKey struct {
 	ExpiresAt        *time.Time `gorm:"index"`
 	RevokedAt        *time.Time
 	LastUsedAt       *time.Time
-	CreatedBy        string    `gorm:"type:text;not null"`
+	CreatedBy        string `gorm:"type:text;not null"`
 	CreatedAt        time.Time
 
 	// Preloaded association — not a DB column.

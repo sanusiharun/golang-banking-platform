@@ -62,14 +62,14 @@ func TestIsWithinOperationHours_TimeWindow(t *testing.T) {
 	// boundary logic via direct arithmetic checks instead.
 
 	tests := []struct {
-		window    string
-		startH    int
-		startM    int
-		endH      int
-		endM      int
-		nowH      int
-		nowM      int
-		wantOK    bool
+		window string
+		startH int
+		startM int
+		endH   int
+		endM   int
+		nowH   int
+		nowM   int
+		wantOK bool
 	}{
 		// Inside window
 		{"07.00-15.00", 7, 0, 15, 0, 10, 30, true},

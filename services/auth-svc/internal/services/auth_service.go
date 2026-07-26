@@ -94,7 +94,7 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (res *dt
 	user, err := s.userRepo.FindByUsername(ctx, req.Username)
 	if err != nil {
 		if errors.Is(err, repository.ErrUserNotFound) {
-			_ = bcrypt.CompareHashAndPassword([]byte(s.dummyHash), []byte(req.Password))
+			_ = bcrypt.CompareHashAndPassword([]byte(s.dummyHash), []byte(req.Password)) //nolint:errcheck // timing-attack mitigation: run bcrypt regardless of outcome so user-not-found and wrong-password take the same time
 			err = ErrInvalidCredentials
 			return nil, err
 		}
@@ -103,7 +103,7 @@ func (s *authService) Login(ctx context.Context, req *dto.LoginRequest) (res *dt
 
 	// Reject inactive accounts before checking password (timing-safe: always run bcrypt)
 	if !user.IsActive {
-		_ = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password))
+		_ = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)) //nolint:errcheck // timing-attack mitigation: run bcrypt regardless of outcome so inactive-account and wrong-password take the same time
 		err = ErrInvalidCredentials
 		return nil, err
 	}

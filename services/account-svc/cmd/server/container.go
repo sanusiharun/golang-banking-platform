@@ -67,8 +67,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Migrations ────────────────────────────────────────────────────────────
-	if err := runMigrations(cfg); err != nil {
-		return nil, fmt.Errorf("run migrations: %w", err)
+	if migrateErr := runMigrations(cfg); migrateErr != nil {
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────

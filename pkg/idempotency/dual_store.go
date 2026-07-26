@@ -2,6 +2,7 @@ package idempotency
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -35,7 +36,7 @@ func (d *DualStore) Acquire(ctx context.Context, scopeKey string, meta Meta) (*R
 		// Redis succeeded — rec is nil (acquired) or an existing record (replay/in-flight).
 		return rec, nil
 	}
-	if err == ErrInFlight {
+	if errors.Is(err, ErrInFlight) {
 		return nil, ErrInFlight
 	}
 

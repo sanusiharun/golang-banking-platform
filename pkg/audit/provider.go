@@ -57,11 +57,11 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig) (Publisher, *nats.Co
 		return NoopPublisher{}, nil
 	}
 
-	if err := waitForConn(ctx, nc, cfg.ConnectWait); err != nil {
+	if waitErr := waitForConn(ctx, nc, cfg.ConnectWait); waitErr != nil {
 		slog.WarnContext(ctx, "audit: NATS not ready within timeout, using noop publisher",
 			slog.String("service", cfg.ServiceName),
 			slog.String("url", cfg.NATSURL),
-			slog.String("error", err.Error()))
+			slog.String("error", waitErr.Error()))
 		nc.Close()
 		return NoopPublisher{}, nil
 	}
@@ -71,7 +71,7 @@ func NewPublisher(ctx context.Context, cfg PublisherConfig) (Publisher, *nats.Co
 		slog.WarnContext(ctx, "audit: JetStream setup failed, using noop publisher",
 			slog.String("service", cfg.ServiceName),
 			slog.String("error", err.Error()))
-		_ = nc.Drain()
+		_ = nc.Drain() //nolint:errcheck // best-effort cleanup on an already-failed setup path; falling back to NoopPublisher regardless
 		return NoopPublisher{}, nil
 	}
 

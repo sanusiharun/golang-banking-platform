@@ -28,7 +28,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r := chi.NewRouter()
 
 	// ── Global middleware ─────────────────────────────────────────────────────
-	r.Use(chimiddleware.RealIP)
+	r.Use(chimiddleware.RealIP) //nolint:staticcheck // known IP-spoofing risk (GHSA-3fxj-6jh8-hvhx): services are also directly reachable on their own ports per HANDOFF.md, not just via the Traefik gateway, so a caller can forge X-Forwarded-For. Tracked as a pending fix (trusted-proxy-scoped IP resolution), not silently accepted -- see HANDOFF.md.
 	r.Use(pkgmiddleware.RequestID)
 	r.Use(pkgmiddleware.RequestLogger)
 	r.Use(pkgmiddleware.Tracing("audit-svc"))

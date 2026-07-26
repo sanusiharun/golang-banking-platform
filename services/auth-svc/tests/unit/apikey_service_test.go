@@ -19,14 +19,14 @@ import (
 // ── Mock stores ───────────────────────────────────────────────────────────────
 
 type mockSAStore struct {
-	saved    *dao.ServiceAccount
-	saveErr  error
-	found    *dao.ServiceAccount
-	findErr  error
-	updated  *dao.ServiceAccount
+	saved     *dao.ServiceAccount
+	saveErr   error
+	found     *dao.ServiceAccount
+	findErr   error
+	updated   *dao.ServiceAccount
 	updateErr error
-	listed   []*dao.ServiceAccount
-	listErr  error
+	listed    []*dao.ServiceAccount
+	listErr   error
 }
 
 func (m *mockSAStore) Save(_ context.Context, sa *dao.ServiceAccount) error {
@@ -51,14 +51,14 @@ var _ repository.ServiceAccountStore = (*mockSAStore)(nil)
 
 // mockKeyStore implements repository.APIKeyStore for testing.
 type mockKeyStore struct {
-	saved        *dao.APIKey
-	saveErr      error
-	identity     *pkgmiddleware.ServiceAccountIdentity
-	findErr      error
-	revokeErr    error
-	listed       []*dao.APIKey
-	listErr      error
-	lastUsedErr  error
+	saved       *dao.APIKey
+	saveErr     error
+	identity    *pkgmiddleware.ServiceAccountIdentity
+	findErr     error
+	revokeErr   error
+	listed      []*dao.APIKey
+	listErr     error
+	lastUsedErr error
 }
 
 func (m *mockKeyStore) Save(_ context.Context, key *dao.APIKey) error {

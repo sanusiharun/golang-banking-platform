@@ -20,16 +20,20 @@ jobs:
         with:
           go-version-file: go.work
           cache: true
-      # install-mode: goinstall builds golangci-lint with the toolchain
-      # setup-go just installed (per go.work's `go 1.26.3`) instead of
-      # downloading a prebuilt binary that may have been built with an
-      # older Go version than the one this workspace targets.
+      # .golangci.yml is a proper v2 config (linters.settings, linters.exclusions,
+      # a separate formatters: section for gofmt/goimports) -- install the v2
+      # module path, built locally with the toolchain setup-go just prepared
+      # from go.work, which also fixes the original Go 1.26 build-version
+      # mismatch (the action's prebuilt binary was built with Go 1.24).
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+      # golangci-lint can't resolve `./...` at the repo root of a go.work
+      # multi-module workspace with no root go.mod ("directory prefix . does
+      # not contain modules listed in go.work"), so delegate to `make lint`,
+      # which already loops pkg/ + every service in Makefile's SERVICES list --
+      # the same command developers run locally.
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
-          install-mode: goinstall
-          args: --timeout=5m
+        run: make lint
 
   test-unit:
     name: Unit Tests

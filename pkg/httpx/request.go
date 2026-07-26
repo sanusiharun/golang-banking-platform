@@ -14,7 +14,7 @@ func DecodeJSON(r *http.Request, dst any) error {
 	if r.Body == nil {
 		return fmt.Errorf("request body is empty")
 	}
-	defer r.Body.Close()
+	defer r.Body.Close() //nolint:errcheck // closing a request body we only read from; nothing to do on failure
 
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()

@@ -196,73 +196,94 @@ func (c *Client) Do(ctx context.Context, method, path string, body any, out any,
 			return fmt.Errorf("%w: build request: %w", ErrNonTransient, err)
 		}
 
-		resp, err := c.http.Do(req)
+		resp, doErr := c.http.Do(req)
 		cancel() // release per-request context resources
-		if err != nil {
-			// Network-level error
-			if isNonTransientNetworkError(err) {
-				return fmt.Errorf("%w: %w", ErrNonTransient, err)
-			}
-			if c.shouldRetryError(&c.cfg, err) && attempt < maxAttempts-1 {
-				lastErr = err
-				if sleepErr := sleep(ctx, backoff(&c.cfg, attempt)); sleepErr != nil {
-					return sleepErr
-				}
-				continue
-			}
-			return err
+
+		var outcome doOutcome
+		if doErr != nil {
+			outcome = c.handleNetworkError(doErr, attempt, maxAttempts)
+		} else {
+			respBody, readErr := io.ReadAll(resp.Body)
+			resp.Body.Close() //nolint:errcheck,gosec // closing a response body we've already fully read; nothing to do on failure
+			outcome = c.handleResponse(resp, respBody, readErr, attempt, maxAttempts, out)
 		}
 
-		// Read and close body
-		respBody, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		// HTTP 409 with IDEMPOTENCY_IN_FLIGHT — transient; retry with fixed 100ms delay.
-		// All other 409s remain non-retryable (e.g. duplicate username conflict).
-		if resp.StatusCode == http.StatusConflict && strings.Contains(string(respBody), "IDEMPOTENCY_IN_FLIGHT") {
-			if attempt < maxAttempts-1 {
-				if sleepErr := sleep(ctx, 100*time.Millisecond); sleepErr != nil {
-					return sleepErr
-				}
-				continue
+		if outcome.retry {
+			if outcome.err != nil {
+				lastErr = outcome.err
 			}
-			return fmt.Errorf("%w: HTTP 409 IDEMPOTENCY_IN_FLIGHT after %d attempts", ErrRetriesExhausted, maxAttempts)
-		}
-
-		// HTTP 4xx — non-transient, fail immediately
-		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
-			return fmt.Errorf("%w: HTTP %d: %s", ErrNonTransient, resp.StatusCode, summarize(respBody))
-		}
-
-		// HTTP 5xx — retry if configured
-		if resp.StatusCode >= 500 {
-			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, summarize(respBody))
-			if c.shouldRetryStatus(&c.cfg, resp.StatusCode) {
-				if attempt < maxAttempts-1 {
-					if sleepErr := sleep(ctx, backoff(&c.cfg, attempt)); sleepErr != nil {
-						return sleepErr
-					}
-					continue
-				}
-				// Retries enabled but budget exhausted
-				return fmt.Errorf("%w: %w", ErrRetriesExhausted, lastErr)
+			if sleepErr := sleep(ctx, outcome.delay); sleepErr != nil {
+				return sleepErr
 			}
-			return lastErr
+			continue
 		}
-
-		// Success — decode response
-		if readErr != nil {
-			return fmt.Errorf("read response body: %w", readErr)
-		}
-		if out != nil && len(respBody) > 0 {
-			if err := json.Unmarshal(respBody, out); err != nil {
-				return fmt.Errorf("%w: decode response: %w", ErrNonTransient, err)
-			}
-		}
-		return nil
+		return outcome.err
 	}
 
 	return fmt.Errorf("%w: %w", ErrRetriesExhausted, lastErr)
+}
+
+// doOutcome is the result of one request attempt: either a final verdict
+// (retry == false, err is nil on success) or a retry instruction (err, if
+// set, is remembered as lastErr for the eventual ErrRetriesExhausted wrap).
+type doOutcome struct {
+	retry bool
+	delay time.Duration
+	err   error
+}
+
+// handleNetworkError classifies a transport-level error (failed to even get
+// a response) as non-transient, retryable, or terminal.
+func (c *Client) handleNetworkError(err error, attempt, maxAttempts int) doOutcome {
+	if isNonTransientNetworkError(err) {
+		return doOutcome{err: fmt.Errorf("%w: %w", ErrNonTransient, err)}
+	}
+	if c.shouldRetryError(&c.cfg, err) && attempt < maxAttempts-1 {
+		return doOutcome{retry: true, delay: backoff(&c.cfg, attempt), err: err}
+	}
+	return doOutcome{err: err}
+}
+
+// handleResponse classifies a received HTTP response (409 idempotency
+// conflict, 4xx, 5xx, or success) and, on success, decodes the body into out.
+func (c *Client) handleResponse(resp *http.Response, respBody []byte, readErr error, attempt, maxAttempts int, out any) doOutcome {
+	// HTTP 409 with IDEMPOTENCY_IN_FLIGHT — transient; retry with fixed 100ms delay.
+	// All other 409s remain non-retryable (e.g. duplicate username conflict).
+	if resp.StatusCode == http.StatusConflict && strings.Contains(string(respBody), "IDEMPOTENCY_IN_FLIGHT") {
+		if attempt < maxAttempts-1 {
+			return doOutcome{retry: true, delay: 100 * time.Millisecond}
+		}
+		return doOutcome{err: fmt.Errorf("%w: HTTP 409 IDEMPOTENCY_IN_FLIGHT after %d attempts", ErrRetriesExhausted, maxAttempts)}
+	}
+
+	// HTTP 4xx — non-transient, fail immediately
+	if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+		return doOutcome{err: fmt.Errorf("%w: HTTP %d: %s", ErrNonTransient, resp.StatusCode, summarize(respBody))}
+	}
+
+	// HTTP 5xx — retry if configured
+	if resp.StatusCode >= 500 {
+		statusErr := fmt.Errorf("HTTP %d: %s", resp.StatusCode, summarize(respBody))
+		if c.shouldRetryStatus(&c.cfg, resp.StatusCode) {
+			if attempt < maxAttempts-1 {
+				return doOutcome{retry: true, delay: backoff(&c.cfg, attempt), err: statusErr}
+			}
+			// Retries enabled but budget exhausted
+			return doOutcome{err: fmt.Errorf("%w: %w", ErrRetriesExhausted, statusErr)}
+		}
+		return doOutcome{err: statusErr}
+	}
+
+	// Success — decode response
+	if readErr != nil {
+		return doOutcome{err: fmt.Errorf("read response body: %w", readErr)}
+	}
+	if out != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, out); err != nil {
+			return doOutcome{err: fmt.Errorf("%w: decode response: %w", ErrNonTransient, err)}
+		}
+	}
+	return doOutcome{}
 }
 
 // buildRequest constructs an *http.Request with optional body, headers, and per-request timeout.
@@ -287,7 +308,7 @@ func (c *Client) buildRequest(
 		b, err := json.Marshal(body)
 		if err != nil {
 			cancel()
-		return nil, nil, fmt.Errorf("marshal body: %w", err)
+			return nil, nil, fmt.Errorf("marshal body: %w", err)
 		}
 		bodyReader = bytes.NewReader(b)
 	}

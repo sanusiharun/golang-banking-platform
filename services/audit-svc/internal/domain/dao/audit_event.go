@@ -11,15 +11,15 @@ import (
 // AuditEvent is the GORM model for the audit_events table.
 // The table is append-only: no Update or Delete methods exist on the repository.
 type AuditEvent struct {
-	ID          string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
-	ActorType   string    `gorm:"not null"`
-	ActorID     string    `gorm:"not null;index:idx_audit_actor,priority:1"`
+	ID          string `gorm:"primaryKey;type:uuid;default:gen_random_uuid()"`
+	ActorType   string `gorm:"not null"`
+	ActorID     string `gorm:"not null;index:idx_audit_actor,priority:1"`
 	ActorEmail  string
-	Action      string    `gorm:"not null;index:idx_audit_action,priority:1"`
-	Status      string    `gorm:"not null;default:'success'"`
+	Action      string `gorm:"not null;index:idx_audit_action,priority:1"`
+	Status      string `gorm:"not null;default:'success'"`
 	Resource    string
 	ResourceID  string
-	ServiceName string    `gorm:"not null;index:idx_audit_service_time,priority:1"`
+	ServiceName string `gorm:"not null;index:idx_audit_service_time,priority:1"`
 	TraceID     string
 	IPAddress   string
 	UserAgent   string

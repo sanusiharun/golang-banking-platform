@@ -98,14 +98,14 @@ func (d *Dispatcher) Start(ctx context.Context) {
 	work := make(chan *dao.Notification, d.cfg.Workers*2)
 
 	var wg sync.WaitGroup
-	for i := range d.cfg.Workers {
+	for range d.cfg.Workers {
 		wg.Add(1)
-		go func(id int) {
+		go func() {
 			defer wg.Done()
 			for n := range work {
 				d.process(ctx, n)
 			}
-		}(i)
+		}()
 	}
 
 	ticker := time.NewTicker(d.cfg.PollEvery)
@@ -169,7 +169,7 @@ func (d *Dispatcher) process(ctx context.Context, n *dao.Notification) {
 	// Build metadata from payload.
 	var metadata map[string]any
 	if len(n.Payload) > 0 {
-		_ = json.Unmarshal(n.Payload, &metadata)
+		_ = json.Unmarshal(n.Payload, &metadata) //nolint:errcheck // best-effort decode of a stored jsonb column; a decode failure just leaves metadata nil
 	}
 
 	// Send via provider.
@@ -193,7 +193,7 @@ func (d *Dispatcher) process(ctx context.Context, n *dao.Notification) {
 
 	// Mark SENT.
 	now := time.Now().UTC()
-	providerRespJSON, _ := json.Marshal(result.ProviderResp)
+	providerRespJSON, _ := json.Marshal(result.ProviderResp) //nolint:errcheck // marshaling a provider response map for storage; failure just leaves the audit column empty
 	extras := map[string]any{
 		"provider_ref":  result.ProviderRef,
 		"provider_resp": providerRespJSON,
@@ -239,7 +239,7 @@ func (d *Dispatcher) render(ctx context.Context, n *dao.Notification) (body, sub
 
 	var vars map[string]any
 	if len(n.TemplateVars) > 0 {
-		_ = json.Unmarshal(n.TemplateVars, &vars)
+		_ = json.Unmarshal(n.TemplateVars, &vars) //nolint:errcheck // best-effort decode of a stored jsonb column; a decode failure just leaves vars nil
 	}
 
 	body, err = d.engine.Render(tmpl.Format, tmpl.Body, vars)
