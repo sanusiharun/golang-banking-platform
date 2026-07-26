@@ -15,18 +15,18 @@ This project provides engineering slash commands for Claude Code. Type `/` in th
 
 ### `/feature-workflow`
 
-Runs the whole delivery pipeline for one feature/service change, sequencing the other
-commands instead of ad-hoc-ing each stage:
+Runs the whole delivery pipeline for one feature/service change on its own branch, sequencing
+the other commands instead of ad-hoc-ing each stage:
 
 ```
-Stage 0  Intake       — restate requirement, confirm scope
+Stage 0  Intake       — restate requirement, confirm scope, create feature/{service}-{slug} branch
 Stage 1  Research     — produce/update the 5 docs in services/{name}/docs/ (via /eng-delivery)
 Stage 2  Build        — code + unit tests + observability per architecture.md (via /eng-standards, /eng-observability)
-Stage 3  Review       — tests/lint, commit, PR (with your go-ahead), /code-review + /security-review, fold findings into review.md
+Stage 3  Review       — tests/lint, commit, PR (with your go-ahead), /code-review AND /security-review (both mandatory), fold findings into review.md
 ```
 
 Stops for your confirmation before Stage 2 (architecture is expensive to unwind after
-code exists) and before opening any PR.
+code exists) and before opening any PR. Never commits to `main` directly.
 
 **Example prompt:**
 ```
