@@ -90,9 +90,9 @@ func (w *SchedulerWorker) fire(ctx context.Context, s *dao.Schedule) {
 
 	var vars map[string]any
 	if len(s.TemplateVars) > 0 {
-		_ = json.Unmarshal(s.TemplateVars, &vars)
+		_ = json.Unmarshal(s.TemplateVars, &vars) //nolint:errcheck // best-effort decode of a stored jsonb column; a decode failure just leaves vars nil
 	}
-	varsJSON, _ := json.Marshal(vars)
+	varsJSON, _ := json.Marshal(vars) //nolint:errcheck // re-marshaling data just decoded above cannot fail
 
 	n := &dao.Notification{
 		ID:             uuid.New().String(),

@@ -71,5 +71,5 @@ func (tw *timeoutResponseWriter) flush(w http.ResponseWriter) {
 	if tw.status != 0 {
 		w.WriteHeader(tw.status)
 	}
-	_, _ = w.Write(tw.body)
+	_, _ = w.Write(tw.body) //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 }

@@ -75,6 +75,25 @@ type cursorPayload struct {
 	ID        string    `json:"i"`
 }
 
+// applyEqualityFilters adds a WHERE clause for each non-empty equality filter in params.
+func applyEqualityFilters(q *gorm.DB, params dto.QueryParams) *gorm.DB {
+	filters := map[string]string{
+		"actor_id = ?":     params.ActorID,
+		"action = ?":       params.Action,
+		"status = ?":       params.Status,
+		"service_name = ?": params.ServiceName,
+		"trace_id = ?":     params.TraceID,
+		"resource = ?":     params.Resource,
+		"resource_id = ?":  params.ResourceID,
+	}
+	for clause, value := range filters {
+		if value != "" {
+			q = q.Where(clause, value)
+		}
+	}
+	return q
+}
+
 // List applies filters and keyset pagination, returning events ordered by
 // (created_at DESC, id DESC). Limit defaults to 50, max 200.
 func (r *auditRepository) List(ctx context.Context, params dto.QueryParams) (events []*dao.AuditEvent, nextCursor string, err error) {
@@ -89,30 +108,7 @@ func (r *auditRepository) List(ctx context.Context, params dto.QueryParams) (eve
 		limit = 200
 	}
 
-	q := r.db.WithContext(ctx).Model(&dao.AuditEvent{})
-
-	// Apply equality filters
-	if params.ActorID != "" {
-		q = q.Where("actor_id = ?", params.ActorID)
-	}
-	if params.Action != "" {
-		q = q.Where("action = ?", params.Action)
-	}
-	if params.Status != "" {
-		q = q.Where("status = ?", params.Status)
-	}
-	if params.ServiceName != "" {
-		q = q.Where("service_name = ?", params.ServiceName)
-	}
-	if params.TraceID != "" {
-		q = q.Where("trace_id = ?", params.TraceID)
-	}
-	if params.Resource != "" {
-		q = q.Where("resource = ?", params.Resource)
-	}
-	if params.ResourceID != "" {
-		q = q.Where("resource_id = ?", params.ResourceID)
-	}
+	q := applyEqualityFilters(r.db.WithContext(ctx).Model(&dao.AuditEvent{}), params)
 
 	// Apply time range filters
 	if params.From != nil {
@@ -139,7 +135,7 @@ func (r *auditRepository) List(ctx context.Context, params dto.QueryParams) (eve
 	if len(rows) > limit {
 		rows = rows[:limit]
 		last := rows[len(rows)-1]
-		nextCursor, _ = encodeCursor(cursorPayload{CreatedAt: last.CreatedAt, ID: last.ID})
+		nextCursor, _ = encodeCursor(cursorPayload{CreatedAt: last.CreatedAt, ID: last.ID}) //nolint:errcheck // marshaling a struct of time.Time + string cannot fail
 	}
 
 	return rows, nextCursor, nil

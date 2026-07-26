@@ -46,7 +46,7 @@ func (h *APIKeyHandler) CreateServiceAccount(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAdminSvcAccCreated,
@@ -128,7 +128,7 @@ func (h *APIKeyHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAPIKeyCreated,
@@ -167,7 +167,7 @@ func (h *APIKeyHandler) RevokeAPIKey(w http.ResponseWriter, r *http.Request) {
 	}
 
 	callerID := pkgmiddleware.UserIDFromContext(r.Context())
-	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{
+	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
 		ActorID:     callerID,
 		Action:      pkgaudit.ActionAPIKeyRevoked,

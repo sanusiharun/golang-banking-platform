@@ -639,4 +639,3 @@ func TestNewAuthService_WithNegativeBCryptCost(t *testing.T) {
 		t.Error("expected service to be created")
 	}
 }
-

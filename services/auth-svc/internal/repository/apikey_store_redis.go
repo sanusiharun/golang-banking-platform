@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	apiKeyCachePrefix = "apikey:"    // apikey:{sha256_hash} → ServiceAccountIdentity JSON
+	apiKeyCachePrefix = "apikey:" // apikey:{sha256_hash} → ServiceAccountIdentity JSON
 	apiKeyCacheTTL    = 5 * time.Minute
 )
 
@@ -170,4 +170,3 @@ func CacheInvalidator(store APIKeyStore) redisInvalidator {
 	}
 	return nil
 }
-

@@ -156,7 +156,7 @@ func (r *scheduleRepository) List(ctx context.Context, filter dto.ListSchedulesF
 		pageSize = 20
 	}
 
-	if err = q.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
+	if err = q.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, fmt.Errorf("schedule_repository.List: %w", err)
 	}
 	return items, total, nil
@@ -167,12 +167,12 @@ func (r *scheduleRepository) ClaimDue(ctx context.Context, now time.Time, limit 
 	defer r.tr.Finish(span, &err)
 
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.
+		if findErr := tx.
 			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Where("enabled = true AND next_run_at <= ?", now).
 			Limit(limit).
-			Find(&res).Error; err != nil {
-			return err
+			Find(&res).Error; findErr != nil {
+			return findErr
 		}
 		return nil
 	})

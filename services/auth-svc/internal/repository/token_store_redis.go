@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -13,12 +14,12 @@ import (
 )
 
 const (
-	redisTokenPrefix      = "rt:"           // rt:{hash}
-	redisUserRevokedKey   = "user_revoked:" // user_revoked:{user_id} = unix timestamp
+	redisTokenPrefix    = "rt:"           // rt:{hash}
+	redisUserRevokedKey = "user_revoked:" // user_revoked:{user_id} = unix timestamp
 )
 
 type redisTokenStore struct {
-	client         *redis.Client
+	client          *redis.Client
 	refreshTokenTTL time.Duration
 }
 
@@ -66,15 +67,15 @@ func (s *redisTokenStore) FindByHash(ctx context.Context, hash string) (*dao.Ref
 	key := redisTokenPrefix + hash
 	data, err := s.client.Get(ctx, key).Bytes()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil, ErrTokenNotFound
 		}
 		return nil, fmt.Errorf("token_store(redis): find: %w", err)
 	}
 
 	var payload redisTokenPayload
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil, fmt.Errorf("token_store(redis): unmarshal: %w", err)
+	if unmarshalErr := json.Unmarshal(data, &payload); unmarshalErr != nil {
+		return nil, fmt.Errorf("token_store(redis): unmarshal: %w", unmarshalErr)
 	}
 
 	if payload.Revoked {
@@ -87,7 +88,7 @@ func (s *redisTokenStore) FindByHash(ctx context.Context, hash string) (*dao.Ref
 
 	// Check if RevokeAllForUser was called after this token was issued.
 	revokedBefore, err := s.client.Get(ctx, redisUserRevokedKey+payload.UserID).Int64()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, fmt.Errorf("token_store(redis): check user revocation: %w", err)
 	}
 	if revokedBefore > 0 && payload.CreatedAt.Unix() < revokedBefore {
@@ -109,15 +110,15 @@ func (s *redisTokenStore) Revoke(ctx context.Context, hash string) error {
 	key := redisTokenPrefix + hash
 	data, err := s.client.Get(ctx, key).Bytes()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return nil // already gone — treat as success
 		}
 		return fmt.Errorf("token_store(redis): revoke fetch: %w", err)
 	}
 
 	var payload redisTokenPayload
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return fmt.Errorf("token_store(redis): revoke unmarshal: %w", err)
+	if unmarshalErr := json.Unmarshal(data, &payload); unmarshalErr != nil {
+		return fmt.Errorf("token_store(redis): revoke unmarshal: %w", unmarshalErr)
 	}
 	payload.Revoked = true
 

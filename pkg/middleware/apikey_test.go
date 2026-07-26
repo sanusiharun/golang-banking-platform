@@ -18,10 +18,10 @@ import (
 // ── Mock APIKeyLookup ─────────────────────────────────────────────────────────
 
 type mockAPIKeyLookup struct {
-	identity      *middleware.ServiceAccountIdentity
-	findErr       error
-	updateErr     error
-	updateCalled  bool
+	identity     *middleware.ServiceAccountIdentity
+	findErr      error
+	updateErr    error
+	updateCalled bool
 }
 
 func (m *mockAPIKeyLookup) FindActiveByHash(_ context.Context, _ string) (*middleware.ServiceAccountIdentity, error) {
@@ -92,13 +92,13 @@ func TestAuthenticateAPIKey(t *testing.T) {
 	}
 
 	tests := []struct {
-		name       string
-		header     string // Authorization header value
-		xAPIKey    string // X-API-Key header value
-		env        string // middleware env
-		identity   *middleware.ServiceAccountIdentity
-		findErr    error
-		wantStatus int
+		name        string
+		header      string // Authorization header value
+		xAPIKey     string // X-API-Key header value
+		env         string // middleware env
+		identity    *middleware.ServiceAccountIdentity
+		findErr     error
+		wantStatus  int
 		wantSubject string
 	}{
 		{
@@ -172,7 +172,7 @@ func TestAuthenticateAPIKey(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 			if tc.header != "" {
 				req.Header.Set("Authorization", tc.header)
 			}
@@ -203,7 +203,7 @@ func TestAuthenticateAPIKey_ExpiryRejection(t *testing.T) {
 	}
 	cfg := middleware.APIKeyConfig{Lookup: lookup, Environment: "local"}
 
-	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 	req.Header.Set("Authorization", "ApiKey bp_test_ABCDEFGHIJKLMNOPQRSTUVWXYZabcde")
 
 	rr := httptest.NewRecorder()
@@ -254,7 +254,7 @@ func TestAuthenticateAny(t *testing.T) {
 			handler := middleware.AuthenticateAny(jwtCfg, apiKeyCfg)
 			next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
-			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/", nil)
 			if tc.authHeader != "" {
 				req.Header.Set("Authorization", tc.authHeader)
 			}
@@ -315,7 +315,7 @@ func TestAuthenticateAPIKey_ExpiresAtPropagated(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
 	req.Header.Set("X-API-Key", "bp_test_ABCDEFGHIJKLMNOPQRSTUVWXYZabcde")
 	rr := httptest.NewRecorder()
 

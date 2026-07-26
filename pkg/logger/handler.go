@@ -117,7 +117,7 @@ func (m *MultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 func (m *MultiHandler) Handle(ctx context.Context, r slog.Record) error {
 	for _, h := range m.handlers {
 		if h.Enabled(ctx, r.Level) {
-			_ = h.Handle(ctx, r.Clone())
+			_ = h.Handle(ctx, r.Clone()) //nolint:errcheck // fan-out to a secondary log handler; one handler's failure must not block the others
 		}
 	}
 	return nil

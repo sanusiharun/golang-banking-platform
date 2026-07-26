@@ -70,8 +70,8 @@ func (s *notificationService) Send(ctx context.Context, req *dto.SendNotificatio
 		maxRetries = 3
 	}
 
-	varsJSON, _ := json.Marshal(req.TemplateVars)
-	payloadJSON, _ := json.Marshal(req.Payload)
+	varsJSON, _ := json.Marshal(req.TemplateVars) //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
+	payloadJSON, _ := json.Marshal(req.Payload)   //nolint:errcheck // marshaling an already-JSON-decoded map cannot fail
 
 	n := &dao.Notification{
 		ID:             uuid.New().String(),
@@ -119,8 +119,8 @@ func (s *notificationService) Retry(ctx context.Context, id string) (res *dto.No
 	}
 
 	extras := map[string]any{
-		"status":      dao.StatusPending,
-		"retry_count": 0,
+		"status":        dao.StatusPending,
+		"retry_count":   0,
 		"error_message": nil,
 	}
 	if err = s.repo.UpdateStatus(ctx, id, dao.StatusPending, extras); err != nil {
@@ -236,10 +236,10 @@ func toNotificationResponse(n *dao.Notification) *dto.NotificationResponse {
 		r.ErrorMessage = n.ErrorMessage.String
 	}
 	if len(n.TemplateVars) > 0 {
-		_ = json.Unmarshal(n.TemplateVars, &r.TemplateVars)
+		_ = json.Unmarshal(n.TemplateVars, &r.TemplateVars) //nolint:errcheck // best-effort decode of a stored jsonb column for display; a decode failure just leaves the field empty
 	}
 	if len(n.Payload) > 0 {
-		_ = json.Unmarshal(n.Payload, &r.Payload)
+		_ = json.Unmarshal(n.Payload, &r.Payload) //nolint:errcheck // best-effort decode of a stored jsonb column for display; a decode failure just leaves the field empty
 	}
 	return r
 }

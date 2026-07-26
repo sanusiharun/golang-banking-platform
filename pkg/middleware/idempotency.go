@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,7 +24,7 @@ const (
 	headerIdempotencyReplay  = "Idempotency-Replay"
 	headerIdempotencyExpires = "Idempotency-Key-Expires"
 
-	defaultIdempotencyTTL     = 24 * time.Hour
+	defaultIdempotencyTTL      = 24 * time.Hour
 	defaultMaxResponseBodySize = 1 << 20 // 1 MB
 )
 
@@ -56,35 +58,22 @@ func Idempotency(cfg IdempotencyConfig) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// ── Skip safe methods unconditionally ─────────────────────────────
-			switch r.Method {
-			case http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodOptions:
+			if isSafeMethod(r.Method) {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			// ── Skip JWT (human) callers ──────────────────────────────────────
-			claims, ok := ClaimsFromContext(r.Context())
-			if !ok || !IsServiceAccount(claims) {
+			claims, isServiceCaller := serviceAccountClaims(r.Context())
+			if !isServiceCaller {
 				next.ServeHTTP(w, r)
 				return
 			}
 
 			// ── Require Idempotency-Key header ────────────────────────────────
-			idempKey := strings.TrimSpace(r.Header.Get(headerIdempotencyKey))
-			if idempKey == "" {
-				httpx.WriteHTTPError(w, r, &httpx.HTTPError{
-					StatusCode: http.StatusBadRequest,
-					Code:       "MISSING_IDEMPOTENCY_KEY",
-					Message:    "Idempotency-Key header is required for this operation",
-				})
-				return
-			}
-			if len(idempKey) > 255 {
-				httpx.WriteHTTPError(w, r, &httpx.HTTPError{
-					StatusCode: http.StatusBadRequest,
-					Code:       "INVALID_IDEMPOTENCY_KEY",
-					Message:    "Idempotency-Key must not exceed 255 characters",
-				})
+			idempKey, keyErr := validateIdempotencyKeyHeader(r)
+			if keyErr != nil {
+				httpx.WriteHTTPError(w, r, keyErr)
 				return
 			}
 
@@ -101,58 +90,140 @@ func Idempotency(cfg IdempotencyConfig) func(http.Handler) http.Handler {
 			}
 
 			// ── Acquire ───────────────────────────────────────────────────────
-			existing, err := cfg.Store.Acquire(r.Context(), scope, meta)
-			if err == idempotency.ErrInFlight {
-				slog.InfoContext(r.Context(), "idempotency: request in flight",
-					slog.String("scope_prefix", scope[:8]),
-					slog.String("idempotency_key", idempKey),
-				)
-				httpx.WriteHTTPError(w, r, &httpx.HTTPError{
-					StatusCode: http.StatusConflict,
-					Code:       "IDEMPOTENCY_IN_FLIGHT",
-					Message:    "a request with this idempotency key is already being processed",
-				})
-				return
-			}
-			if err != nil {
-				slog.ErrorContext(r.Context(), "idempotency: store acquire failed",
-					slog.String("error", err.Error()),
-				)
-				// Degrade gracefully — proceed without idempotency protection.
-				next.ServeHTTP(w, r)
+			acquired := acquire(r, cfg.Store, scope, idempKey, meta)
+			if acquired.respondOrDegrade(w, r, next) {
 				return
 			}
 
 			// ── Replay existing completed/failed response ──────────────────────
-			if existing != nil {
-				span := trace.SpanFromContext(r.Context())
-				span.SetAttributes(
-					attribute.String("idempotency.outcome", "replayed"),
-					attribute.String("idempotency.key_prefix", idempKey[:min(8, len(idempKey))]),
-				)
-				slog.InfoContext(r.Context(), "idempotency: replaying response",
-					slog.String("scope_prefix", scope[:8]),
-					slog.Int("status_code", existing.StatusCode),
-				)
-				replayResponse(w, existing, expiresAt)
+			if acquired.existing != nil {
+				replayExisting(w, r, idempKey, scope, acquired.existing, expiresAt)
 				return
 			}
 
-			// ── Execute handler ────────────────────────────────────────────────
-			rec := captureAndExecute(w, r, next, scope, cfg, expiresAt)
-			if rec == nil {
-				return // large body — response already written, no storage
-			}
-
-			// ── Persist completed record ───────────────────────────────────────
-			if err := cfg.Store.Complete(r.Context(), scope, rec); err != nil {
-				slog.ErrorContext(r.Context(), "idempotency: store complete failed",
-					slog.String("error", err.Error()),
-				)
-				// Non-fatal — response already sent to client.
-			}
+			// ── Execute handler and persist the result ──────────────────────────
+			executeAndPersist(w, r, next, scope, cfg, expiresAt)
 		})
 	}
+}
+
+// isSafeMethod reports whether method never needs idempotency protection.
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodDelete, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+// replayExisting writes a previously completed/failed response back to the
+// client without re-executing the handler, recording the outcome on the span and log.
+func replayExisting(w http.ResponseWriter, r *http.Request, idempKey, scope string, existing *idempotency.Record, expiresAt time.Time) {
+	span := trace.SpanFromContext(r.Context())
+	span.SetAttributes(
+		attribute.String("idempotency.outcome", "replayed"),
+		attribute.String("idempotency.key_prefix", idempKey[:min(8, len(idempKey))]),
+	)
+	slog.InfoContext(r.Context(), "idempotency: replaying response",
+		slog.String("scope_prefix", scope[:8]),
+		slog.Int("status_code", existing.StatusCode),
+	)
+	replayResponse(w, existing, expiresAt)
+}
+
+// executeAndPersist runs the handler and stores its response for future replay.
+func executeAndPersist(w http.ResponseWriter, r *http.Request, next http.Handler, scope string, cfg IdempotencyConfig, expiresAt time.Time) {
+	rec := captureAndExecute(w, r, next, scope, cfg, expiresAt)
+	if rec == nil {
+		return // large body — response already written, no storage
+	}
+	if err := cfg.Store.Complete(r.Context(), scope, rec); err != nil {
+		slog.ErrorContext(r.Context(), "idempotency: store complete failed",
+			slog.String("error", err.Error()),
+		)
+		// Non-fatal — response already sent to client.
+	}
+}
+
+// validateIdempotencyKeyHeader extracts and validates the Idempotency-Key header,
+// returning an HTTPError describing the problem when the key is missing or too long.
+func validateIdempotencyKeyHeader(r *http.Request) (string, *httpx.HTTPError) {
+	idempKey := strings.TrimSpace(r.Header.Get(headerIdempotencyKey))
+	if idempKey == "" {
+		return "", &httpx.HTTPError{
+			StatusCode: http.StatusBadRequest,
+			Code:       "MISSING_IDEMPOTENCY_KEY",
+			Message:    "Idempotency-Key header is required for this operation",
+		}
+	}
+	if len(idempKey) > 255 {
+		return "", &httpx.HTTPError{
+			StatusCode: http.StatusBadRequest,
+			Code:       "INVALID_IDEMPOTENCY_KEY",
+			Message:    "Idempotency-Key must not exceed 255 characters",
+		}
+	}
+	return idempKey, nil
+}
+
+// serviceAccountClaims returns the request's claims and whether the caller is
+// a service account (the only caller type idempotency protection applies to).
+func serviceAccountClaims(ctx context.Context) (*Claims, bool) {
+	claims, ok := ClaimsFromContext(ctx)
+	if !ok || !IsServiceAccount(claims) {
+		return claims, false
+	}
+	return claims, true
+}
+
+// acquireResult is the outcome of attempting to acquire the idempotency lock
+// for one request: exactly one of httpErr, degrade, or existing (possibly nil,
+// meaning "first request, proceed to execute the handler") applies.
+type acquireResult struct {
+	httpErr  *httpx.HTTPError    // set on IN_FLIGHT conflict — write and return
+	degrade  bool                // set on a store error — proceed without idempotency protection
+	existing *idempotency.Record // set (non-nil) when replaying a completed/failed prior response
+}
+
+// respondOrDegrade writes the appropriate response for a terminal acquire
+// outcome (IN_FLIGHT conflict or store-error degrade) and reports whether the
+// caller has already been fully handled and should stop.
+func (a acquireResult) respondOrDegrade(w http.ResponseWriter, r *http.Request, next http.Handler) bool {
+	if a.httpErr != nil {
+		httpx.WriteHTTPError(w, r, a.httpErr)
+		return true
+	}
+	if a.degrade {
+		next.ServeHTTP(w, r)
+		return true
+	}
+	return false
+}
+
+// acquire calls the idempotency store once and classifies the result into
+// exactly one of: in-flight conflict, degrade-on-error, or proceed (with or
+// without an existing record to replay).
+func acquire(r *http.Request, store idempotency.Store, scope, idempKey string, meta idempotency.Meta) acquireResult {
+	existing, err := store.Acquire(r.Context(), scope, meta)
+	if errors.Is(err, idempotency.ErrInFlight) {
+		slog.InfoContext(r.Context(), "idempotency: request in flight",
+			slog.String("scope_prefix", scope[:8]),
+			slog.String("idempotency_key", idempKey),
+		)
+		return acquireResult{httpErr: &httpx.HTTPError{
+			StatusCode: http.StatusConflict,
+			Code:       "IDEMPOTENCY_IN_FLIGHT",
+			Message:    "a request with this idempotency key is already being processed",
+		}}
+	}
+	if err != nil {
+		slog.ErrorContext(r.Context(), "idempotency: store acquire failed",
+			slog.String("error", err.Error()),
+		)
+		return acquireResult{degrade: true}
+	}
+	return acquireResult{existing: existing}
 }
 
 // captureAndExecute runs the handler with a response recorder, stores the result,
@@ -216,7 +287,7 @@ func replayResponse(w http.ResponseWriter, rec *idempotency.Record, expiresAt ti
 	w.Header().Set(headerIdempotencyReplay, "true")
 	w.Header().Set(headerIdempotencyExpires, expiresAt.UTC().Format(time.RFC3339))
 	w.WriteHeader(rec.StatusCode)
-	_, _ = w.Write(rec.Body)
+	_, _ = w.Write(rec.Body) //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 }
 
 // writeRecorderToWriter flushes the captured response to the real ResponseWriter.
@@ -227,14 +298,14 @@ func writeRecorderToWriter(w http.ResponseWriter, rec *responseRecorder) {
 		}
 	}
 	w.WriteHeader(rec.statusCode)
-	_, _ = w.Write(rec.body.Bytes())
+	_, _ = w.Write(rec.body.Bytes()) //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 }
 
 // scopeKey computes the idempotency scope as SHA-256(callerID|method|path|idempotencyKey).
 // Including callerID prevents cross-caller key collisions.
 func scopeKey(callerID, method, path, idempotencyKey string) string {
 	h := sha256.New()
-	fmt.Fprintf(h, "%s|%s|%s|%s", callerID, method, path, idempotencyKey)
+	fmt.Fprintf(h, "%s|%s|%s|%s", callerID, method, path, idempotencyKey) //nolint:errcheck // hash.Hash.Write never returns an error, per the io.Writer contract in the standard library's hash package
 	return hex.EncodeToString(h.Sum(nil))
 }
 

@@ -127,7 +127,7 @@ type introspectAPIKeyRequest struct {
 }
 
 type introspectAPIKeyResponse struct {
-	Success bool                               `json:"success"`
+	Success bool                                  `json:"success"`
 	Data    *pkgmiddleware.ServiceAccountIdentity `json:"data"`
 	Error   *struct {
 		Code    string `json:"code"`

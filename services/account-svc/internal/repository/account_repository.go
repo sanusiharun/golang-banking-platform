@@ -141,7 +141,7 @@ func (r *accountRepository) List(ctx context.Context, customerID string, page, p
 	if err = q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("count accounts: %w", err)
 	}
-	if err = q.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&accounts).Error; err != nil {
+	if err = q.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&accounts).Error; err != nil {
 		return nil, 0, fmt.Errorf("list accounts: %w", err)
 	}
 

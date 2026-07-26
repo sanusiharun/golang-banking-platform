@@ -72,7 +72,7 @@ func TestAuditHandler_IngestEvent(t *testing.T) {
 			mockSvc := &MockAuditService{Err: tt.svcErr}
 			handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-			req := httptest.NewRequest(http.MethodPost, "/v1/audit/events", strings.NewReader(tt.body))
+			req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/audit/events", strings.NewReader(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
@@ -93,7 +93,7 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 		mockSvc := &MockAuditService{Event: &dto.EventResponse{ID: "evt-001"}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/evt-001", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events/evt-001", nil)
 		req = withURLParams(req, map[string]string{"id": "evt-001"})
 		w := httptest.NewRecorder()
 
@@ -108,7 +108,7 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 		mockSvc := &MockAuditService{Err: postgres.ErrNotFound}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/missing", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events/missing", nil)
 		req = withURLParams(req, map[string]string{"id": "missing"})
 		w := httptest.NewRecorder()
 
@@ -123,7 +123,7 @@ func TestAuditHandler_GetEvent(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events/evt-001", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events/evt-001", nil)
 		req = withURLParams(req, map[string]string{"id": "evt-001"})
 		w := httptest.NewRecorder()
 
@@ -140,7 +140,7 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{Total: 0}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events?limit=20", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events?limit=20", nil)
 		w := httptest.NewRecorder()
 
 		handler.ListEvents(w, req)
@@ -157,7 +157,7 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events", nil)
 		w := httptest.NewRecorder()
 
 		handler.ListEvents(w, req)
@@ -171,7 +171,7 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet,
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet,
 			"/v1/audit/events?from=2026-01-01T00:00:00Z&to=2026-01-31T00:00:00Z", nil)
 		w := httptest.NewRecorder()
 
@@ -192,7 +192,7 @@ func TestAuditHandler_ListEvents(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/events?from=not-a-date&to=also-bad", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/events?from=not-a-date&to=also-bad", nil)
 		w := httptest.NewRecorder()
 
 		handler.ListEvents(w, req)
@@ -212,7 +212,7 @@ func TestAuditHandler_ListActorEvents(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
 		req = withURLParams(req, map[string]string{"actor_id": "usr-001"})
 		w := httptest.NewRecorder()
 
@@ -230,7 +230,7 @@ func TestAuditHandler_ListActorEvents(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/actors/usr-001/events", nil)
 		req = withURLParams(req, map[string]string{"actor_id": "usr-001"})
 		w := httptest.NewRecorder()
 
@@ -247,7 +247,7 @@ func TestAuditHandler_ListResourceEvents(t *testing.T) {
 		mockSvc := &MockAuditService{List_: &dto.EventListResponse{}}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
 		req = withURLParams(req, map[string]string{"resource": "account", "resource_id": "acc-001"})
 		w := httptest.NewRecorder()
 
@@ -266,7 +266,7 @@ func TestAuditHandler_ListResourceEvents(t *testing.T) {
 		mockSvc := &MockAuditService{Err: errors.New("db down")}
 		handler := transport.NewAuditHandler(mockSvc, validator.New())
 
-		req := httptest.NewRequest(http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/audit/resources/account/acc-001/events", nil)
 		req = withURLParams(req, map[string]string{"resource": "account", "resource_id": "acc-001"})
 		w := httptest.NewRecorder()
 
@@ -284,7 +284,7 @@ func TestAuditHandler_IngestEvent_ResponseShape(t *testing.T) {
 	handler := transport.NewAuditHandler(mockSvc, validator.New())
 
 	body := `{"actor_type":"user","actor_id":"usr-001","action":"login","status":"success","service_name":"auth-svc"}`
-	req := httptest.NewRequest(http.MethodPost, "/v1/audit/events", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/audit/events", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 

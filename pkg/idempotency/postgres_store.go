@@ -11,16 +11,16 @@ import (
 
 // idempotencyRow maps to the idempotency_requests table.
 type idempotencyRow struct {
-	ID              string     `gorm:"primaryKey;type:text"`
-	ScopeKey        string     `gorm:"type:text;not null;uniqueIndex"`
-	IdempotencyKey  string     `gorm:"type:text;not null"`
-	CallerID        string     `gorm:"type:text;not null"`
-	HTTPMethod      string     `gorm:"type:text;not null"`
-	URLPath         string     `gorm:"type:text;not null"`
-	Status          string     `gorm:"type:text;not null;default:processing"`
-	StatusCode      *int       `gorm:"type:int"`
-	ResponseHeaders []byte     `gorm:"type:jsonb"`
-	ResponseBody    []byte     `gorm:"type:bytea"`
+	ID              string `gorm:"primaryKey;type:text"`
+	ScopeKey        string `gorm:"type:text;not null;uniqueIndex"`
+	IdempotencyKey  string `gorm:"type:text;not null"`
+	CallerID        string `gorm:"type:text;not null"`
+	HTTPMethod      string `gorm:"type:text;not null"`
+	URLPath         string `gorm:"type:text;not null"`
+	Status          string `gorm:"type:text;not null;default:processing"`
+	StatusCode      *int   `gorm:"type:int"`
+	ResponseHeaders []byte `gorm:"type:jsonb"`
+	ResponseBody    []byte `gorm:"type:bytea"`
 	CreatedAt       time.Time
 	CompletedAt     *time.Time
 	ExpiresAt       time.Time `gorm:"not null"`
@@ -83,7 +83,7 @@ func (s *PostgresStore) Acquire(ctx context.Context, scopeKey string, meta Meta)
 
 func (s *PostgresStore) Complete(ctx context.Context, scopeKey string, rec *Record) error {
 	now := time.Now()
-	headersJSON, _ := json.Marshal(rec.Headers)
+	headersJSON, _ := json.Marshal(rec.Headers) //nolint:errcheck // marshaling a map[string]string of response headers cannot fail
 
 	updates := map[string]any{
 		"status":           string(rec.Status),

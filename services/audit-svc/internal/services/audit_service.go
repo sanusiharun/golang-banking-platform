@@ -146,7 +146,10 @@ func toEventResponse(row *dao.AuditEvent) *dto.EventResponse {
 		CreatedAt:   row.CreatedAt,
 	}
 	if len(row.Metadata) > 0 {
-		_ = json.Unmarshal(row.Metadata, &resp.Metadata)
+		if err := json.Unmarshal(row.Metadata, &resp.Metadata); err != nil {
+			slog.Warn("audit_service: failed to unmarshal event metadata",
+				slog.String("event_id", row.ID), slog.String("error", err.Error()))
+		}
 	}
 	return resp
 }

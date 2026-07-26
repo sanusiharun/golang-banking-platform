@@ -22,8 +22,8 @@ import (
 
 // Sentinel errors for notification repository.
 var (
-	ErrNotificationNotFound  = errors.New("notification not found")
-	ErrDuplicateIdempotency  = errors.New("notification with this idempotency key already exists")
+	ErrNotificationNotFound = errors.New("notification not found")
+	ErrDuplicateIdempotency = errors.New("notification with this idempotency key already exists")
 )
 
 // NotificationRepository defines data access for notifications.
@@ -166,7 +166,7 @@ func (r *notificationRepository) List(ctx context.Context, filter dto.ListNotifi
 		pageSize = 20
 	}
 
-	if err = q.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
+	if err = q.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, fmt.Errorf("notification_repository.List: %w", err)
 	}
 	return items, total, nil
@@ -180,13 +180,13 @@ func (r *notificationRepository) ClaimPending(ctx context.Context, batchSize int
 	defer r.tr.Finish(span, &err)
 
 	err = r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.
+		if findErr := tx.
 			Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
 			Where("status IN ? AND (scheduled_at IS NULL OR scheduled_at <= ?)",
 				[]string{dao.StatusPending, dao.StatusRetrying}, now).
 			Limit(batchSize).
-			Find(&res).Error; err != nil {
-			return err
+			Find(&res).Error; findErr != nil {
+			return findErr
 		}
 		if len(res) == 0 {
 			return nil

@@ -32,13 +32,13 @@ var _ repository.UserRepository = (*MockUserRepo)(nil)
 // ── Mock TokenStore ────────────────────────────────────────────────────────────
 
 type MockTokenStore struct {
-	SaveErr    error
-	FindToken  *dao.RefreshToken
-	FindErr    error
-	RevokeErr  error
-	SaveCalls  int
-	FindCalls  int
-	RevokeCalls   int
+	SaveErr        error
+	FindToken      *dao.RefreshToken
+	FindErr        error
+	RevokeErr      error
+	SaveCalls      int
+	FindCalls      int
+	RevokeCalls    int
 	RevokeAllCalls int
 }
 

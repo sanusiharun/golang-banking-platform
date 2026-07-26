@@ -145,7 +145,7 @@ func (r *templateRepository) List(ctx context.Context, filter dto.ListTemplatesF
 		pageSize = 20
 	}
 
-	if err = q.Offset((page-1)*pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
+	if err = q.Offset((page - 1) * pageSize).Limit(pageSize).Order("created_at DESC").Find(&items).Error; err != nil {
 		return nil, 0, fmt.Errorf("template_repository.List: %w", err)
 	}
 	return items, total, nil

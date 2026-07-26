@@ -37,7 +37,7 @@ func New(cfg *Config) (*gorm.DB, error) {
 
 	gormCfg := &gorm.Config{
 		Logger:                                   newGormLogger(cfg.LogLevel),
-		PrepareStmt:                              true,  // cache prepared statements
+		PrepareStmt:                              true, // cache prepared statements
 		DisableForeignKeyConstraintWhenMigrating: false,
 		// Disable automatic timestamp on fields NOT tagged — prevents surprise updates.
 		NowFunc: func() time.Time { return time.Now().UTC() },

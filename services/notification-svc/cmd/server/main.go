@@ -88,7 +88,7 @@ func run() error {
 		if err := c.otel.Shutdown(shutCtx); err != nil {
 			slog.Error("otel shutdown", slog.String("error", err.Error()))
 		}
-		c.nc.Drain() //nolint:errcheck — best-effort drain on shutdown
+		c.nc.Drain() //nolint:errcheck,gosec // best-effort drain on shutdown
 	}()
 
 	// ── 4. Start background workers ───────────────────────────────────────────

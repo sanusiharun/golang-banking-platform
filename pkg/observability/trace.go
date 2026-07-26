@@ -80,13 +80,13 @@ func (t *ServiceTracer) Start(ctx context.Context, op string, attrs ...attribute
 
 // Finish closes the span and auto-records the outcome.
 //
-//   defer t.Finish(span, &err)
+//	defer t.Finish(span, &err)
 //
 // err is a pointer to the function's named return error. The defer reads the
 // final value at exit time — whichever return path was taken.
 //
-//   err == nil  → span status Ok
-//   err != nil  → span status Error + RecordError event (visible in Jaeger)
+//	err == nil  → span status Ok
+//	err != nil  → span status Error + RecordError event (visible in Jaeger)
 func (t *ServiceTracer) Finish(span trace.Span, err *error) {
 	if err != nil && *err != nil {
 		span.SetStatus(codes.Error, (*err).Error())

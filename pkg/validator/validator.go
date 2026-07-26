@@ -4,6 +4,7 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -62,49 +63,47 @@ func (vld *Validator) ValidateVar(field string, value any, tag string) error {
 	return nil
 }
 
+// fixedTagMessages holds validation messages that don't depend on fe.Param().
+var fixedTagMessages = map[string]string{
+	"required": "this field is required",
+	"email":    "must be a valid email address",
+	"url":      "must be a valid URL",
+	"uuid":     "must be a valid UUID",
+	"alpha":    "must contain only alphabetic characters",
+	"alphanum": "must contain only alphanumeric characters",
+	"numeric":  "must be a numeric value",
+	"iso4217":  "must be a valid ISO 4217 currency code",
+}
+
+// paramTagMessages holds validation message templates for tags that embed
+// fe.Param() (e.g. a length or comparison bound).
+var paramTagMessages = map[string]string{
+	"min":   "must be at least %s",
+	"max":   "must be at most %s",
+	"len":   "must be exactly %s characters",
+	"oneof": "must be one of: %s",
+	"gt":    "must be greater than %s",
+	"gte":   "must be greater than or equal to %s",
+	"lt":    "must be less than %s",
+	"lte":   "must be less than or equal to %s",
+}
+
 // buildMessage produces a human-readable validation message for a field error.
 func buildMessage(fe validator.FieldError) string {
-	switch fe.Tag() {
-	case "required":
-		return "this field is required"
-	case "min":
-		return fmt.Sprintf("must be at least %s", fe.Param())
-	case "max":
-		return fmt.Sprintf("must be at most %s", fe.Param())
-	case "len":
-		return fmt.Sprintf("must be exactly %s characters", fe.Param())
-	case "email":
-		return "must be a valid email address"
-	case "url":
-		return "must be a valid URL"
-	case "uuid":
-		return "must be a valid UUID"
-	case "oneof":
-		return fmt.Sprintf("must be one of: %s", fe.Param())
-	case "gt":
-		return fmt.Sprintf("must be greater than %s", fe.Param())
-	case "gte":
-		return fmt.Sprintf("must be greater than or equal to %s", fe.Param())
-	case "lt":
-		return fmt.Sprintf("must be less than %s", fe.Param())
-	case "lte":
-		return fmt.Sprintf("must be less than or equal to %s", fe.Param())
-	case "alpha":
-		return "must contain only alphabetic characters"
-	case "alphanum":
-		return "must contain only alphanumeric characters"
-	case "numeric":
-		return "must be a numeric value"
-	case "iso4217":
-		return "must be a valid ISO 4217 currency code"
-	default:
-		return fmt.Sprintf("failed validation: %s", fe.Tag())
+	tag := fe.Tag()
+	if msg, ok := fixedTagMessages[tag]; ok {
+		return msg
 	}
+	if tmpl, ok := paramTagMessages[tag]; ok {
+		return fmt.Sprintf(tmpl, fe.Param())
+	}
+	return fmt.Sprintf("failed validation: %s", tag)
 }
 
 // isValidationErrors is a helper to avoid direct type assertion repetition.
 func isValidationErrors(err error, out *validator.ValidationErrors) bool {
-	if verrs, ok := err.(validator.ValidationErrors); ok {
+	var verrs validator.ValidationErrors
+	if errors.As(err, &verrs) {
 		*out = verrs
 		return true
 	}

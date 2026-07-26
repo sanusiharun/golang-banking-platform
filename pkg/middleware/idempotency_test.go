@@ -75,7 +75,7 @@ func serviceAccountRequest(method, path, saID string) *http.Request {
 	lookup := &mockAPIKeyLookup{identity: identity}
 	cfg := middleware.APIKeyConfig{Lookup: lookup, Environment: "local"}
 
-	inner := httptest.NewRequest(method, path, nil)
+	inner := httptest.NewRequestWithContext(context.Background(), method, path, nil)
 	inner.Header.Set("X-API-Key", "bp_test_ABCDEFGHIJKLMNOPQRSTUVWXYZabcde")
 
 	var injected *http.Request
@@ -110,7 +110,7 @@ func TestIdempotency_SafeMethodsPassThrough(t *testing.T) {
 			store := newFakeIdempotencyStore()
 			next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-			req := httptest.NewRequest(method, "/payments", nil)
+			req := httptest.NewRequestWithContext(context.Background(), method, "/payments", nil)
 			rr := httptest.NewRecorder()
 			idempotencyMW(store)(next).ServeHTTP(rr, req)
 
@@ -125,7 +125,7 @@ func TestIdempotency_NoClaimsInContext_PassesThrough(t *testing.T) {
 	store := newFakeIdempotencyStore()
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
-	req := httptest.NewRequest(http.MethodPost, "/payments", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/payments", nil)
 	rr := httptest.NewRecorder()
 	idempotencyMW(store)(next).ServeHTTP(rr, req)
 

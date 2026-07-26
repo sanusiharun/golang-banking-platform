@@ -53,39 +53,56 @@ func CORS(cfg CORSConfig) func(http.Handler) http.Handler {
 			origin := r.Header.Get("Origin")
 
 			if origin != "" {
-				originAllowed := wildcardOrigin
-				if !originAllowed {
-					_, originAllowed = allowedOrigins[strings.ToLower(origin)]
-				}
-
-				if originAllowed {
-					if wildcardOrigin && !cfg.AllowCredentials {
-						w.Header().Set("Access-Control-Allow-Origin", "*")
-					} else {
-						w.Header().Set("Access-Control-Allow-Origin", origin)
-						w.Header().Add("Vary", "Origin")
-					}
-					if cfg.AllowCredentials {
-						w.Header().Set("Access-Control-Allow-Credentials", "true")
-					}
-					if exposedHeaders != "" {
-						w.Header().Set("Access-Control-Expose-Headers", exposedHeaders)
-					}
-				}
+				applyOriginHeaders(w, origin, wildcardOrigin, allowedOrigins, cfg, exposedHeaders)
 			}
 
 			// Handle CORS preflight.
 			if r.Method == http.MethodOptions && origin != "" {
-				w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
-				w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
-				if cfg.MaxAge > 0 {
-					w.Header().Set("Access-Control-Max-Age", maxAgeStr)
-				}
+				writeCORSPreflightHeaders(w, cfg, allowedMethods, allowedHeaders, maxAgeStr)
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
 
 			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+// isOriginAllowed reports whether origin is permitted, either via the "*"
+// wildcard or an exact (case-insensitive) match in allowedOrigins.
+func isOriginAllowed(origin string, wildcardOrigin bool, allowedOrigins map[string]struct{}) bool {
+	if wildcardOrigin {
+		return true
+	}
+	_, ok := allowedOrigins[strings.ToLower(origin)]
+	return ok
+}
+
+// applyOriginHeaders sets the Access-Control-Allow-Origin family of headers
+// for an allowed origin. No-op if the origin is not in the allowlist.
+func applyOriginHeaders(w http.ResponseWriter, origin string, wildcardOrigin bool, allowedOrigins map[string]struct{}, cfg CORSConfig, exposedHeaders string) {
+	if !isOriginAllowed(origin, wildcardOrigin, allowedOrigins) {
+		return
+	}
+	if wildcardOrigin && !cfg.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+	} else {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Add("Vary", "Origin")
+	}
+	if cfg.AllowCredentials {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+	if exposedHeaders != "" {
+		w.Header().Set("Access-Control-Expose-Headers", exposedHeaders)
+	}
+}
+
+// writeCORSPreflightHeaders sets the response headers for an OPTIONS preflight request.
+func writeCORSPreflightHeaders(w http.ResponseWriter, cfg CORSConfig, allowedMethods, allowedHeaders, maxAgeStr string) {
+	w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
+	w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+	if cfg.MaxAge > 0 {
+		w.Header().Set("Access-Control-Max-Age", maxAgeStr)
 	}
 }

@@ -19,7 +19,7 @@ func Async(p Publisher) Publisher {
 // Publish dispatches the event asynchronously and always returns nil.
 func (a *AsyncPublisher) Publish(_ context.Context, event AuditEvent) error {
 	go func() {
-		_ = a.inner.Publish(context.Background(), event)
+		_ = a.inner.Publish(context.Background(), event) //nolint:errcheck // fire-and-forget audit publish; failure is unrecoverable here and must not block the caller
 	}()
 	return nil
 }

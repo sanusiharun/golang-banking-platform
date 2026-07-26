@@ -23,10 +23,10 @@ const (
 
 // HealthResponse is the JSON payload returned by health endpoints.
 type HealthResponse struct {
-	Status    HealthStatus              `json:"status"`
-	Timestamp time.Time                 `json:"timestamp"`
-	Uptime    string                    `json:"uptime"`
-	Checks    map[string]CheckResult    `json:"checks,omitempty"`
+	Status    HealthStatus           `json:"status"`
+	Timestamp time.Time              `json:"timestamp"`
+	Uptime    string                 `json:"uptime"`
+	Checks    map[string]CheckResult `json:"checks,omitempty"`
 }
 
 // CheckResult holds the result of a single health check.
@@ -38,8 +38,8 @@ type CheckResult struct {
 
 // HealthHandler manages liveness and readiness endpoints.
 type HealthHandler struct {
-	mu       sync.RWMutex
-	checkers map[string]Checker
+	mu        sync.RWMutex
+	checkers  map[string]Checker
 	startedAt time.Time
 }
 
@@ -64,7 +64,7 @@ func (h *HealthHandler) LivenessHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{ //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 			"status":    "alive",
 			"timestamp": time.Now().UTC().Format(time.RFC3339),
 		})
@@ -119,6 +119,6 @@ func (h *HealthHandler) ReadinessHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(statusCode)
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 	}
 }

@@ -1,4 +1,5 @@
 //go:build ignore
+
 // TODO: remove the ignore tag (restore to `//go:build integration`) once
 // internal/domain/account and internal/infrastructure/postgres are implemented.
 

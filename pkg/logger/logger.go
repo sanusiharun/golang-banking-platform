@@ -110,7 +110,7 @@ func openOutput(path string) io.Writer {
 	if path == "" {
 		return os.Stdout
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr,
 			"logger: cannot open %q (%v) — falling back to stdout\n", path, err)

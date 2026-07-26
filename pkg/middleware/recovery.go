@@ -16,7 +16,7 @@ func Recovery(next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				stack := debug.Stack()
-				requestID, _ := r.Context().Value(httpx.RequestIDKey).(string)
+				requestID, _ := r.Context().Value(httpx.RequestIDKey).(string) //nolint:errcheck // empty string is a valid, intentional fallback when no request ID was injected
 
 				slog.ErrorContext(r.Context(), "recovered from panic",
 					slog.String("request_id", requestID),

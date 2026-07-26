@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -66,8 +67,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Migrations ────────────────────────────────────────────────────────────
-	if err := runMigrations(cfg); err != nil {
-		return nil, fmt.Errorf("run migrations: %w", err)
+	if migrateErr := runMigrations(cfg); migrateErr != nil {
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
@@ -91,8 +92,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		Addr:     cfg.RedisAddr,
 		Password: cfg.RedisPassword,
 	})
-	if err := redisClient.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("connect redis: %w", err)
+	if pingErr := redisClient.Ping(ctx).Err(); pingErr != nil {
+		return nil, fmt.Errorf("connect redis: %w", pingErr)
 	}
 
 	// ── Idempotency store (DualStore: Redis primary + Postgres fallback) ──────
@@ -111,8 +112,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect nats: %w", err)
 	}
 
-	if err := waitForNATS(ctx, nc, cfg.NATSUrl); err != nil {
-		return nil, err
+	if waitErr := waitForNATS(ctx, nc, cfg.NATSUrl); waitErr != nil {
+		return nil, waitErr
 	}
 	slog.Info("nats connected", slog.String("url", cfg.NATSUrl))
 
@@ -217,7 +218,7 @@ func ensurePaymentsStream(js nats.JetStreamContext) error {
 	if err == nil {
 		return nil
 	}
-	if err != nats.ErrStreamNotFound {
+	if !errors.Is(err, nats.ErrStreamNotFound) {
 		return fmt.Errorf("check payments stream: %w", err)
 	}
 	_, err = js.AddStream(&nats.StreamConfig{

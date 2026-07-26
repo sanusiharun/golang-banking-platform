@@ -60,8 +60,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Migrations ────────────────────────────────────────────────────────────
-	if err := runMigrations(cfg); err != nil {
-		return nil, fmt.Errorf("run migrations: %w", err)
+	if migrateErr := runMigrations(cfg); migrateErr != nil {
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
@@ -92,8 +92,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 
 	// RetryOnFailedConnect returns immediately even if not yet connected.
 	// Wait for the connection to be established before proceeding.
-	if err := waitForNATS(ctx, nc, cfg.NATSUrl); err != nil {
-		return nil, err
+	if waitErr := waitForNATS(ctx, nc, cfg.NATSUrl); waitErr != nil {
+		return nil, waitErr
 	}
 	slog.Info("nats connected", slog.String("url", cfg.NATSUrl))
 
@@ -103,8 +103,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// Ensure the AUDIT stream exists (idempotent — publishers also call this).
-	if err := pkgaudit.EnsureStream(js); err != nil {
-		return nil, fmt.Errorf("ensure audit stream: %w", err)
+	if streamErr := pkgaudit.EnsureStream(js); streamErr != nil {
+		return nil, fmt.Errorf("ensure audit stream: %w", streamErr)
 	}
 
 	// ── Wiring ────────────────────────────────────────────────────────────────

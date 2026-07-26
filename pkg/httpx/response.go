@@ -132,7 +132,7 @@ func writeJSON(w http.ResponseWriter, _ *http.Request, statusCode int, v any) {
 	w.WriteHeader(statusCode)
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(v)
+	_ = enc.Encode(v) //nolint:errcheck // headers already sent; nothing to do if the client disconnected mid-write
 }
 
 // mapDomainError converts a domain/application error into an HTTPError.
@@ -197,17 +197,17 @@ func mapDomainError(err error) *HTTPError {
 
 // extractValidationDetails pulls field-level details from validation errors.
 func extractValidationDetails(err error) map[string]string {
-	var multi *pkgerrors.ErrValidationMulti
 	if pkgerrors.IsValidation(err) {
 		// Try multi first
-		if asMulti, ok := err.(*pkgerrors.ErrValidationMulti); ok {
+		var asMulti *pkgerrors.ErrValidationMulti
+		if errors.As(err, &asMulti) {
 			return asMulti.Fields
 		}
 		// Single field
-		if single, ok := err.(*pkgerrors.ErrValidation); ok {
+		var single *pkgerrors.ErrValidation
+		if errors.As(err, &single) {
 			return map[string]string{single.Field: single.Message}
 		}
-		_ = multi
 	}
 	return nil
 }

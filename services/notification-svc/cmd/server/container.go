@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -33,12 +34,12 @@ import (
 )
 
 type container struct {
-	server    *http.Server
-	otel      *observability.Provider
-	consumer  *transport.Consumer
+	server     *http.Server
+	otel       *observability.Provider
+	consumer   *transport.Consumer
 	dispatcher *worker.Dispatcher
-	scheduler *worker.SchedulerWorker
-	nc        *nats.Conn
+	scheduler  *worker.SchedulerWorker
+	nc         *nats.Conn
 }
 
 // build wires all dependencies for notification-svc.
@@ -70,8 +71,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Migrations ────────────────────────────────────────────────────────────
-	if err := runMigrations(cfg); err != nil {
-		return nil, fmt.Errorf("run migrations: %w", err)
+	if migrateErr := runMigrations(cfg); migrateErr != nil {
+		return nil, fmt.Errorf("run migrations: %w", migrateErr)
 	}
 
 	// ── Database ──────────────────────────────────────────────────────────────
@@ -100,8 +101,8 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 		return nil, fmt.Errorf("connect nats: %w", err)
 	}
 
-	if err := waitForNATS(ctx, nc, cfg.NATSUrl); err != nil {
-		return nil, err
+	if waitErr := waitForNATS(ctx, nc, cfg.NATSUrl); waitErr != nil {
+		return nil, waitErr
 	}
 	slog.Info("nats connected", slog.String("url", cfg.NATSUrl))
 
@@ -111,13 +112,13 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// Ensure the NOTIFICATIONS stream exists.
-	if err := ensureNotificationsStream(js); err != nil {
-		return nil, fmt.Errorf("ensure notifications stream: %w", err)
+	if streamErr := ensureNotificationsStream(js); streamErr != nil {
+		return nil, fmt.Errorf("ensure notifications stream: %w", streamErr)
 	}
 
 	// Ensure the AUDIT stream exists (for audit publishing).
-	if err := pkgaudit.EnsureStream(js); err != nil {
-		return nil, fmt.Errorf("ensure audit stream: %w", err)
+	if auditStreamErr := pkgaudit.EnsureStream(js); auditStreamErr != nil {
+		return nil, fmt.Errorf("ensure audit stream: %w", auditStreamErr)
 	}
 
 	// ── Channel registry ──────────────────────────────────────────────────────
@@ -207,12 +208,12 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	return &container{
-		server:    server,
-		otel:      otelProvider,
-		consumer:  consumer,
+		server:     server,
+		otel:       otelProvider,
+		consumer:   consumer,
 		dispatcher: dispatcher,
-		scheduler: schedulerWorker,
-		nc:        nc,
+		scheduler:  schedulerWorker,
+		nc:         nc,
 	}, nil
 }
 
@@ -222,7 +223,7 @@ func ensureNotificationsStream(js nats.JetStreamContext) error {
 	if err == nil {
 		return nil
 	}
-	if err != nats.ErrStreamNotFound {
+	if !errors.Is(err, nats.ErrStreamNotFound) {
 		return fmt.Errorf("check stream: %w", err)
 	}
 	_, err = js.AddStream(&nats.StreamConfig{
