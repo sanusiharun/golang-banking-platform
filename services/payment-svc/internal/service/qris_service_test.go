@@ -103,6 +103,15 @@ func (m *mockTxnRepo) GetByIdempotencyKey(_ context.Context, key string) (*dao.T
 	return nil, pkgerrors.NotFound("transaction", key)
 }
 
+func (m *mockTxnRepo) GetByExternalReference(_ context.Context, paymentType, externalRef string) (*dao.Transaction, error) {
+	for _, t := range m.byID {
+		if t.PaymentType == paymentType && t.ExternalReference != nil && *t.ExternalReference == externalRef && t.Status != dto.StatusFailed {
+			return t, nil
+		}
+	}
+	return nil, pkgerrors.NotFound("transaction", externalRef)
+}
+
 func (m *mockTxnRepo) ListByAccount(_ context.Context, _ dto.ListFilter) ([]*dao.Transaction, int64, error) {
 	return nil, 0, nil
 }

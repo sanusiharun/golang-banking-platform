@@ -23,6 +23,11 @@ type TransactionRepository interface {
 	// GetByIdempotencyKey retrieves a transaction by its idempotency key.
 	GetByIdempotencyKey(ctx context.Context, key string) (*dao.Transaction, error)
 
+	// GetByExternalReference retrieves the most recent non-failed transaction of the
+	// given payment type carrying the given external reference (e.g. a prior refund
+	// against the same original transaction). Returns a NotFound error if none exists.
+	GetByExternalReference(ctx context.Context, paymentType, externalRef string) (*dao.Transaction, error)
+
 	// ListByAccount returns paginated transactions matching the filter.
 	// Returns the items and the total count for pagination.
 	ListByAccount(ctx context.Context, filter dto.ListFilter) ([]*dao.Transaction, int64, error)

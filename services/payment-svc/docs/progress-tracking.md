@@ -8,6 +8,7 @@
 | 🔄 | In progress |
 | ⬜ | Not started |
 | 🚫 | Blocked |
+| 🔶 | Partial — functionally covered by a different mechanism than originally scoped |
 | 💳 | Technical debt |
 
 ---
@@ -67,8 +68,8 @@
 | E4-T07 | ⬜ | Write `internal/service/retry.go` — BW-05 | Recoverable failure check, retry count guard, re-enter from Processing | FR-12, AC-05, R-06 |
 | E4-T08 | ⬜ | Implement merchant payment handler (FR-02) | Reuse transfer orchestration; product_type = MERCHANT_PAYMENT | FR-02 |
 | E4-T09 | ⬜ | Implement fee charging handler (FR-03) | Service-scoped JWT required; product_type = FEE | FR-03 |
-| E4-T10 | ⬜ | Implement refund handler (FR-04) | product_type = REFUND; validate original transaction reference | FR-04 |
-| E4-T11 | ⬜ | Implement idempotency enforcement — BW-06 | Redis SET NX + DB fallback; cache final response after completion | NFR-01, AC-02, AC-12, R-03 |
+| E4-T10 | ✅ | Implement refund handler (FR-04) | `InitiateRefund` in `payment_service.go`; requires `original_reference`, validates it is SUCCESS, that the refund's accounts exactly reverse the original's source/destination, that amount ≤ original amount, currency matches, and that no other non-failed refund already exists for the same original (via `GetByExternalReference`) before invoking `orchestrator.executeDebitCredit`; payment_type = REFUND | FR-04 |
+| E4-T11 | 🔶 | Implement idempotency enforcement — BW-06 | Refund path gets replay-safe idempotency via `orchestrator.executeDebitCredit`'s DB-unique-key lookup (same mechanism as transfer/QRIS). Still not wired to the Redis `pkg/idempotency.DualStore` built in E3-T02/T03 — that's a separate request-level cache-and-replay layer, not yet plumbed into the orchestrator for any payment type. Tracked as TD-06. | NFR-01, AC-02, AC-12, R-03 |
 
 ---
 
@@ -165,3 +166,4 @@ E8 (observability instrumentation) can be layered in alongside E4–E7 rather th
 | TD-03 | Scheduled payment execution (E7-T01) uses Redis distributed lock but does not yet handle lock expiry edge case where the holder dies mid-execution | Medium | E7-T01 |
 | TD-04 | Circuit breaker on Account Service client (E3-T06) not yet implemented; `pkg/httpclient` handles retry but not open/half-open CB state machine | High | E3-T06 |
 | TD-05 | `go.sum` not generated — run `cd services/payment-svc && go mod tidy` before first build | Low | E1-T01 |
+| TD-06 | Transfer, merchant payment, fee, and refund flows rely on `orchestrator.executeDebitCredit`'s DB-unique-key replay for idempotency, not the Redis-backed `pkg/idempotency.DualStore` built in E3-T02/T03. Functionally safe (AC-02/AC-12 hold via the DB path) but misses the Redis fast-path and `payment_idempotency_hits_total` metric intent. | Medium | E4-T11 |

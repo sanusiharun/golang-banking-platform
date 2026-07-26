@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	pkgerrors "github.com/sanusi/banking/pkg/errors"
 	"github.com/sanusi/banking/services/payment-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/payment-svc/internal/domain/repository"
 	"github.com/sanusi/banking/services/payment-svc/internal/infra/accountclient"
@@ -29,6 +30,7 @@ type paymentService struct {
 	repo      repository.TransactionRepository
 	account   accountclient.AccountClient
 	publisher eventpublisher.PaymentEventPublisher
+	orch      *orchestrator
 }
 
 // NewPaymentService creates a new PaymentService.
@@ -41,6 +43,7 @@ func NewPaymentService(
 		repo:      repo,
 		account:   account,
 		publisher: publisher,
+		orch:      &orchestrator{repo: repo, account: account, publisher: publisher},
 	}
 }
 
@@ -90,8 +93,72 @@ func (s *paymentService) InitiateFee(_ context.Context, _ string, _ *dto.FeeRequ
 	return nil, errNotImplemented("InitiateFee")
 }
 
-func (s *paymentService) InitiateRefund(_ context.Context, _ string, _ *dto.RefundRequest, _ string) (*dto.TransactionResponse, error) {
-	return nil, errNotImplemented("InitiateRefund")
+// InitiateRefund processes a refund against a previously completed transaction.
+// Satisfies FR-04 (accept and process refund requests). A refund is only valid
+// as a reversal of a specific prior transaction, so the source/destination
+// accounts, amount, and currency are all validated against that original
+// transaction rather than trusted from the request:
+//   - original_reference must reference a SUCCESS transaction (required field)
+//   - the refund must move funds from the original's destination back to its
+//     source (i.e. the exact counterparties reverse) — request accounts that
+//     don't match are rejected, closing the "refund as arbitrary transfer" gap
+//   - refund amount must not exceed the original amount, and currency must match
+//   - at most one non-failed refund may exist per original transaction (a second
+//     refund attempt under a different Idempotency-Key is rejected as a conflict;
+//     a retry with the *same* key is still a safe idempotent replay)
+//
+// Idempotency (NFR-01, AC-02, AC-12) for the money movement itself is provided
+// by orchestrator.executeDebitCredit, which replays any existing transaction
+// for the same Idempotency-Key rather than moving funds twice.
+func (s *paymentService) InitiateRefund(ctx context.Context, idempotencyKey string, req *dto.RefundRequest, initiatedBy string) (*dto.TransactionResponse, error) {
+	if req.OriginalReference == "" {
+		return nil, pkgerrors.Validation("original_reference", "original_reference is required")
+	}
+
+	original, err := s.repo.GetByID(ctx, req.OriginalReference)
+	if err != nil {
+		if pkgerrors.IsNotFound(err) {
+			return nil, pkgerrors.Validation("original_reference", "original transaction not found")
+		}
+		return nil, fmt.Errorf("payment_service.InitiateRefund lookup original: %w", err)
+	}
+	if original.Status != dto.StatusSuccess {
+		return nil, pkgerrors.Validation("original_reference", "original transaction is not eligible for refund")
+	}
+	if req.SourceAccountID != original.DestinationAccountID || req.DestinationAccountID != original.SourceAccountID {
+		return nil, pkgerrors.Validation("source_account_id", "refund accounts must match the original transaction's counterparties")
+	}
+	if req.Amount > original.Amount {
+		return nil, pkgerrors.Validation("amount", "refund amount cannot exceed the original transaction amount")
+	}
+	if req.Currency != original.Currency {
+		return nil, pkgerrors.Validation("currency", "refund currency must match the original transaction currency")
+	}
+
+	existing, err := s.repo.GetByExternalReference(ctx, dto.TypeRefund, req.OriginalReference)
+	if err != nil && !pkgerrors.IsNotFound(err) {
+		return nil, fmt.Errorf("payment_service.InitiateRefund lookup existing refund: %w", err)
+	}
+	if existing != nil && existing.IdempotencyKey != idempotencyKey {
+		return nil, pkgerrors.Conflict("transaction", "original_reference", req.OriginalReference)
+	}
+
+	txn, err := s.orch.executeDebitCredit(ctx, debitCreditInput{
+		IdempotencyKey:    idempotencyKey,
+		SourceAccountID:   req.SourceAccountID,
+		DestAccountID:     req.DestinationAccountID,
+		Amount:            req.Amount,
+		Currency:          req.Currency,
+		PaymentType:       dto.TypeRefund,
+		Channel:           dto.ChannelAPI,
+		Description:       req.Description,
+		ExternalReference: req.OriginalReference,
+		InitiatedBy:       initiatedBy,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("payment_service.InitiateRefund: %w", err)
+	}
+	return toResponse(txn), nil
 }
 
 func (s *paymentService) Reverse(_ context.Context, _, _ string) (*dto.TransactionResponse, error) {

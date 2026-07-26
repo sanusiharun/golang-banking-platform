@@ -1,6 +1,6 @@
 # HANDOFF — golang-banking-platform
 
-> Last updated: 2026-07-14 (kyc-svc goals.md written)
+> Last updated: 2026-07-26 (payment-svc: InitiateRefund implemented)
 > Read this first in every new session. CLAUDE.md covers coding conventions only.
 
 ---
@@ -204,7 +204,7 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 - `services/payment-svc/docs/progress-tracking.md` — 9 epics (E1–E9), all tasks ⬜, dependency graph, 3 tech debt items (TD-01–TD-03)
 - `services/payment-svc/docs/review.md` — all criteria ⬜ Unverified; P0 recommendations: implement compensation flow and idempotency before opening any endpoints
 - Key design decisions: Redis SET NX for first-writer-wins idempotency; DB unique constraint on `idempotency_key` and `reversal.original_txn_id` as backstops; circuit breaker + exponential backoff on Account Service; NATS event publishing is non-blocking fire-and-forget; NATS consumer uses queue group for exactly-once delivery across instances
-- **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; core transfer/merchant/fee/refund/reverse endpoints still return `errNotImplemented` (E4 pending)
+- **Scaffold complete (E1+E2+E3 partial):** service boots, runs migrations, serves /healthz; transfer/merchant/fee/reverse/cancel/retry endpoints still return `errNotImplemented` (E4 pending). **Refund is implemented** (E4-T10, 2026-07-26): `InitiateRefund` validates `original_reference` exists and is `SUCCESS`, then reuses `orchestrator.executeDebitCredit` (same idempotent debit/credit + compensation seam QRIS uses). Unit tests in `internal/service/payment_service_test.go`. Idempotency here is the DB-unique-key replay, not yet the Redis `DualStore` — tracked as `TD-06`.
 - Uses `pkg/idempotency.DualStore` (Redis SET NX + Postgres fallback) — no custom idempotency code
 - Uses `pkg/httpclient` for Account Service calls (retry + backoff built in)
 - Amount stored as `BIGINT` (minor currency units) matching account-svc convention
@@ -336,7 +336,8 @@ go test -run TestLogin_Success ./services/auth-svc/tests/unit
 - [ ] **Introspect endpoint security** — `POST /auth/apikey/introspect` has no auth; add shared-secret header or IP allowlist (currently relies on Docker network isolation only)
 - [ ] **Logout ActorID** — logs raw `RefreshToken` as ActorID; replace with `pkgmiddleware.UserIDFromContext(ctx)`
 - [ ] **API key cache warm-up** — pre-populate Redis on auth-svc startup to avoid cold-start miss under load
-- [ ] **payment-svc E4 (service layer)** — scaffold done; implement `InitiateTransfer`, `Reverse`, `Cancel`, `Retry` in `internal/service/`; E5-T05 handlers already wired, just need the service logic
+- [ ] **payment-svc E4 (service layer)** — `InitiateRefund` done; implement `InitiateTransfer`, `InitiateMerchantPayment`, `InitiateFee`, `Reverse`, `Cancel`, `Retry` in `internal/service/`; handlers already wired, just need the service logic
+- [ ] **payment-svc TD-06** — wire `pkg/idempotency.DualStore` (Redis SET NX + Postgres fallback) into `orchestrator.executeDebitCredit` so all payment types get the Redis fast-path + `payment_idempotency_hits_total` metric, not just the DB-unique-key replay
 - [ ] **payment-svc go.sum** — run `cd services/payment-svc && go mod tidy` once before first build
 - [ ] **payment-svc DB setup** — run `datasource/postgres/06_setup_banking_payments.sql` as superuser
 - [ ] **payment-svc ACCOUNT_SVC_API_KEY** — `services/payment-svc/.env` has `ACCOUNT_SVC_API_KEY=` empty; generate a `bp_live_*` service account key via `POST /internal/service-accounts` on auth-svc and paste it in
