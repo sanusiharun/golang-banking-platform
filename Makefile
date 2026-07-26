@@ -30,7 +30,7 @@ endif
 
 # ─── Variables ────────────────────────────────────────────────────────────────
 GOWORK_FILE := go.work
-SERVICES    := services/auth-svc services/account-svc services/audit-svc
+SERVICES    := services/auth-svc services/account-svc services/audit-svc services/notification-svc services/payment-svc
 PROTO_DIR   := proto
 
 # ─── Default ──────────────────────────────────────────────────────────────────
@@ -68,8 +68,13 @@ test: ## Run unit tests for all workspace members
 
 test-integration: ## Run integration tests (requires running Postgres)
 	@for svc in $(SERVICES); do \
-		echo "→ Integration tests: $$svc ..."; \
-		(cd $$svc && go test -tags=integration -race -v ./tests/integration/...); \
+		pkgs=$$(cd $$svc 2>/dev/null && go list -tags=integration ./tests/integration/... 2>/dev/null); \
+		if [ -n "$$pkgs" ]; then \
+			echo "→ Integration tests: $$svc ..."; \
+			(cd $$svc && go test -tags=integration -race -v ./tests/integration/...) || exit 1; \
+		else \
+			echo "→ Integration tests: $$svc ... skipped (no buildable //go:build integration packages)"; \
+		fi; \
 	done
 
 # ─── Lint ─────────────────────────────────────────────────────────────────────
