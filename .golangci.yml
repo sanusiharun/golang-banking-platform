@@ -1,8 +1,13 @@
 # .golangci.yml — linter configuration for golang-banking-platform
 # Run: make lint
 # Docs: https://golangci-lint.run/usage/configuration/
+#
+# This file uses the v1 config schema (linters.enable, top-level
+# linters-settings/issues) -- keep `version` at "1" (or omit it) unless this
+# file is rewritten for v2 (formatters as a separate top-level section,
+# issues.exclude-rules moved under linters.exclusions, etc).
 
-version: "2"
+version: "1"
 
 run:
   timeout: 5m
