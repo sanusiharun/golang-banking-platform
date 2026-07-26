@@ -83,6 +83,21 @@ func (r *PostgresTransactionRepository) GetByIdempotencyKey(ctx context.Context,
 	return &txn, nil
 }
 
+func (r *PostgresTransactionRepository) GetByExternalReference(ctx context.Context, paymentType, externalRef string) (*dao.Transaction, error) {
+	var txn dao.Transaction
+	err := r.db.WithContext(ctx).
+		Where("payment_type = ? AND external_reference = ? AND status != ?", paymentType, externalRef, dto.StatusFailed).
+		Order("created_at ASC").
+		First(&txn).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, pkgerrors.NotFound("transaction", externalRef)
+		}
+		return nil, fmt.Errorf("transaction_repo.GetByExternalReference: %w", err)
+	}
+	return &txn, nil
+}
+
 func (r *PostgresTransactionRepository) ListByAccount(ctx context.Context, filter dto.ListFilter) ([]*dao.Transaction, int64, error) {
 	q := r.db.WithContext(ctx).Model(&dao.Transaction{})
 

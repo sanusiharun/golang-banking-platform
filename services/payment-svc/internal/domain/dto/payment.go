@@ -70,7 +70,7 @@ type RefundRequest struct {
 	DestinationAccountID string         `json:"destination_account_id" validate:"required,uuid"`
 	Amount               int64          `json:"amount"                 validate:"required,gt=0"`
 	Currency             string         `json:"currency"               validate:"required,len=3,uppercase"`
-	OriginalReference    string         `json:"original_reference"     validate:"max=128"`
+	OriginalReference    string         `json:"original_reference"     validate:"required,max=128"`
 	Description          string         `json:"description"            validate:"max=500"`
 	Metadata             map[string]any `json:"metadata"`
 }
