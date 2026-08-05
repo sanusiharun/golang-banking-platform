@@ -136,13 +136,14 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	router := transport.NewRouter(transport.RouterConfig{
-		AuthHandler:   authHandler,
-		APIKeyHandler: apiKeyHandler,
-		Health:        health,
-		Environment:   cfg.Environment,
-		PublicKey:     &privateKey.PublicKey,
-		SubjectKey:    subjectKey,
-		Issuer:        cfg.JWTIssuer,
+		AuthHandler:            authHandler,
+		APIKeyHandler:          apiKeyHandler,
+		Health:                 health,
+		Environment:            cfg.Environment,
+		PublicKey:              &privateKey.PublicKey,
+		SubjectKey:             subjectKey,
+		Issuer:                 cfg.JWTIssuer,
+		IntrospectSharedSecret: cfg.IntrospectSharedSecret,
 	})
 
 	// ── Idempotency store ─────────────────────────────────────────────────────

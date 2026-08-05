@@ -107,7 +107,7 @@ func build(ctx context.Context, cfg *svcconfig.Config) (*container, error) {
 	}
 
 	// ── Auth service client (for inter-service calls) ────────────────────────
-	authClient := authclient.New(cfg.AuthSvcURL)
+	authClient := authclient.New(cfg.AuthSvcURL, cfg.ServiceSecret)
 
 	// ── Feature flags (optional — returns defaults if Flipt is unreachable) ─────
 	featureflag.Init(cfg.FliptURL, "default")

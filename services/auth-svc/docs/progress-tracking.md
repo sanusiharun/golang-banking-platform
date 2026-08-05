@@ -77,7 +77,7 @@
 | E3-T13 | `POST /auth/apikey/introspect` handler | ✅ | `internal/transport/apikey_handler.go` |
 | E3-T14 | Unit tests: `APIKeyService` | ✅ | `internal/services/apikey_service_test.go` |
 | E3-T15 | Integration tests: `RedisAPIKeyStore` | ✅ | `internal/repository/apikey_store_integration_test.go` |
-| E3-T16 | Introspect endpoint security: shared-secret or IP allowlist | ⬜ | **See HANDOFF.md pending items** |
+| E3-T16 | Introspect endpoint security: shared-secret header (`SERVICE_SECRET` / `X-Service-Secret`) | ✅ | `pkg/middleware/sharedsecret.go` |
 | E3-T17 | API key cache warm-up on startup | ⬜ | Nice-to-have for cold-start latency |
 
 ---
@@ -170,7 +170,6 @@ E1 (Foundation)
 | Blocker | Affects | Owner | Resolution |
 |---|---|---|---|
 | `04_setup_banking_audits.sql` migration not run | E5-T11, audit-svc end-to-end | Ops | Run manually or wire into datasource bootstrap |
-| Introspect endpoint has no auth | E3-T16 | Backend | Add shared-secret header check |
 
 ---
 

@@ -5,7 +5,7 @@
 //
 // Usage:
 //
-//	client := authclient.New("http://localhost:8080")
+//	client := authclient.New("http://localhost:8080", serviceSecret)
 //	info, err := client.Inspect(ctx, token)
 //	if err != nil { ... }
 //	if !info.HasRole("ADMIN", "TELLER") {
@@ -26,12 +26,15 @@ import (
 
 // Client calls auth-svc endpoints.
 type Client struct {
-	http *httpclient.Client
+	http          *httpclient.Client
+	serviceSecret string // sent as X-Service-Secret on /auth/apikey/introspect
 }
 
 // New creates an authclient pointed at authSvcURL (e.g. "http://localhost:8080").
 // Uses conservative defaults: short timeout, limited retries — auth-svc should be fast.
-func New(authSvcURL string) *Client {
+// serviceSecret must match auth-svc's SERVICE_SECRET; empty is allowed when that
+// check is disabled (dev/local).
+func New(authSvcURL, serviceSecret string) *Client {
 	cfg := httpclient.DefaultConfig()
 	cfg.BaseURL = authSvcURL
 	cfg.ConnectTimeout = 2 * time.Second
@@ -40,7 +43,7 @@ func New(authSvcURL string) *Client {
 	cfg.RetryOn5xx = true
 	cfg.RetryOnTimeout = true
 
-	return &Client{http: httpclient.New(cfg)}
+	return &Client{http: httpclient.New(cfg), serviceSecret: serviceSecret}
 }
 
 // ── Request / Response types ──────────────────────────────────────────────────
@@ -139,7 +142,8 @@ type introspectAPIKeyResponse struct {
 // ServiceAccountIdentity. Called by the APIKeyLookup adapter on every API key request.
 func (c *Client) IntrospectAPIKey(ctx context.Context, hash string) (*pkgmiddleware.ServiceAccountIdentity, error) {
 	var resp introspectAPIKeyResponse
-	err := c.http.Do(ctx, http.MethodPost, "/auth/apikey/introspect", introspectAPIKeyRequest{Hash: hash}, &resp)
+	err := c.http.Do(ctx, http.MethodPost, "/auth/apikey/introspect", introspectAPIKeyRequest{Hash: hash}, &resp,
+		httpclient.WithHeader(pkgmiddleware.HeaderServiceSecret, c.serviceSecret))
 	if err != nil {
 		return nil, fmt.Errorf("authclient.IntrospectAPIKey: %w", err)
 	}

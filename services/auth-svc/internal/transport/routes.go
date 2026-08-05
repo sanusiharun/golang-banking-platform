@@ -22,6 +22,9 @@ type RouterConfig struct {
 	PublicKey  *rsa.PublicKey
 	SubjectKey []byte
 	Issuer     string
+
+	// IntrospectSharedSecret guards /auth/apikey/introspect. Empty disables the check.
+	IntrospectSharedSecret string
 }
 
 // NewRouter builds the auth-svc chi router.
@@ -58,10 +61,12 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.With(pkgmiddleware.Authenticate(jwtCfg)).Post("/auth/logout", cfg.AuthHandler.Logout)
 
 	// ── API key introspection — called by downstream services ────────────────
-	// Accepts a SHA-256 hash, returns ServiceAccountIdentity. No JWT required.
-	// Only reachable over the internal Docker network (banking-net).
+	// Accepts a SHA-256 hash, returns ServiceAccountIdentity. No JWT (the hash IS
+	// the credential); guarded instead by a shared secret set via SERVICE_SECRET,
+	// since Docker network isolation alone doesn't stop a caller on banking-net.
 	if cfg.APIKeyHandler != nil {
-		r.Post("/auth/apikey/introspect", cfg.APIKeyHandler.IntrospectAPIKey)
+		r.With(pkgmiddleware.RequireServiceSecret(cfg.IntrospectSharedSecret)).
+			Post("/auth/apikey/introspect", cfg.APIKeyHandler.IntrospectAPIKey)
 	}
 
 	// ── Internal / admin endpoints (JWT + admin role required) ───────────────

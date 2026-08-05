@@ -48,6 +48,11 @@ type Config struct {
 	// Token store
 	TokenStore string // "postgres" | "redis" | "memory"
 
+	// IntrospectSharedSecret guards POST /auth/apikey/introspect. Must match the
+	// SERVICE_SECRET set on every service calling introspect (e.g. account-svc).
+	// Empty disables the check (dev/local convenience only).
+	IntrospectSharedSecret string
+
 	// Feature flags — optional, returns defaults if empty or unreachable
 	FliptURL      string
 	RedisAddr     string
@@ -69,40 +74,41 @@ func Load() (*Config, error) {
 	environment := getEnv("ENVIRONMENT", "local")
 
 	cfg := &Config{
-		ServiceName:      getEnv("SERVICE_NAME", "auth-svc"),
-		ServiceVersion:   getEnv("SERVICE_VERSION", "dev"),
-		Environment:      environment,
-		HTTPPort:         getEnvInt("HTTP_PORT", 8080),
-		ReadTimeout:      getEnvDuration("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:     getEnvDuration("WRITE_TIMEOUT", 30*time.Second),
-		IdleTimeout:      getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
-		ShutdownTimeout:  getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
-		LogLevel:         getEnv("LOG_LEVEL", "info"),
-		LogFormat:        getEnv("LOG_FORMAT", "json"),
-		DBHost:           getEnv("DB_HOST", ""),
-		DBPort:           getEnvInt("DB_PORT", 5432),
-		DBName:           getEnv("DB_NAME", "authdb"),
-		DBUser:           getEnv("DB_USER", ""),
-		DBPassword:       getEnv("DB_PASSWORD", ""),
-		DBSSLMode:        getEnv("DB_SSLMODE", "disable"),
-		DBMaxConns:       getEnvInt("DB_MAX_CONNS", 10),
-		DBMinConns:       getEnvInt("DB_MIN_CONNS", 2),
-		DBLogLevel:       getEnv("DB_LOG_LEVEL", "silent"),
-		JWTPrivateKeyB64: getEnv("JWT_PRIVATE_KEY_B64", ""),
-		JWTIssuer:        getEnv("JWT_ISSUER", "banking-platform"),
-		AccessTokenTTL:   getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
-		RefreshTokenTTL:  getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
-		JWTSubjectKeyB64: getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
-		BCryptCost:       getEnvInt("BCRYPT_COST", 12),
-		TokenStore:       getEnv("TOKEN_STORE", "postgres"),
-		FliptURL:         getEnv("FLIPT_URL", ""),
-		RedisAddr:        getEnv("REDIS_ADDR", "localhost:6379"),
-		RedisPassword:    getEnv("REDIS_PASSWORD", ""),
-		NATSUrl:          getEnv("NATS_URL", ""),
-		OTelEnabled:      getEnvBool("OTEL_ENABLED", false),
-		OTelLogsEnabled:  getEnvBool("OTEL_LOGS_ENABLED", false),
-		OTelEndpoint:     getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
-		OTelSamplingRate: getEnvFloat("OTEL_SAMPLING_RATE", 1.0),
+		ServiceName:            getEnv("SERVICE_NAME", "auth-svc"),
+		ServiceVersion:         getEnv("SERVICE_VERSION", "dev"),
+		Environment:            environment,
+		HTTPPort:               getEnvInt("HTTP_PORT", 8080),
+		ReadTimeout:            getEnvDuration("READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:           getEnvDuration("WRITE_TIMEOUT", 30*time.Second),
+		IdleTimeout:            getEnvDuration("IDLE_TIMEOUT", 60*time.Second),
+		ShutdownTimeout:        getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
+		LogLevel:               getEnv("LOG_LEVEL", "info"),
+		LogFormat:              getEnv("LOG_FORMAT", "json"),
+		DBHost:                 getEnv("DB_HOST", ""),
+		DBPort:                 getEnvInt("DB_PORT", 5432),
+		DBName:                 getEnv("DB_NAME", "authdb"),
+		DBUser:                 getEnv("DB_USER", ""),
+		DBPassword:             getEnv("DB_PASSWORD", ""),
+		DBSSLMode:              getEnv("DB_SSLMODE", "disable"),
+		DBMaxConns:             getEnvInt("DB_MAX_CONNS", 10),
+		DBMinConns:             getEnvInt("DB_MIN_CONNS", 2),
+		DBLogLevel:             getEnv("DB_LOG_LEVEL", "silent"),
+		JWTPrivateKeyB64:       getEnv("JWT_PRIVATE_KEY_B64", ""),
+		JWTIssuer:              getEnv("JWT_ISSUER", "banking-platform"),
+		AccessTokenTTL:         getEnvDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
+		RefreshTokenTTL:        getEnvDuration("REFRESH_TOKEN_TTL", 7*24*time.Hour),
+		JWTSubjectKeyB64:       getEnv("JWT_SUBJECT_ENCRYPTION_KEY", ""),
+		BCryptCost:             getEnvInt("BCRYPT_COST", 12),
+		TokenStore:             getEnv("TOKEN_STORE", "postgres"),
+		IntrospectSharedSecret: getEnv("SERVICE_SECRET", ""),
+		FliptURL:               getEnv("FLIPT_URL", ""),
+		RedisAddr:              getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:          getEnv("REDIS_PASSWORD", ""),
+		NATSUrl:                getEnv("NATS_URL", ""),
+		OTelEnabled:            getEnvBool("OTEL_ENABLED", false),
+		OTelLogsEnabled:        getEnvBool("OTEL_LOGS_ENABLED", false),
+		OTelEndpoint:           getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OTelSamplingRate:       getEnvFloat("OTEL_SAMPLING_RATE", 1.0),
 	}
 
 	return cfg, cfg.validate()
