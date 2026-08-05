@@ -46,10 +46,16 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Get("/healthz/ready", cfg.Health.ReadinessHandler())
 	r.Handle("/metrics", pkgmiddleware.PrometheusHandler())
 
+	jwtCfg := pkgmiddleware.JWTConfig{
+		PublicKey:  cfg.PublicKey,
+		Issuer:     cfg.Issuer,
+		SubjectKey: cfg.SubjectKey,
+	}
+
 	// ── Auth endpoints (public) ───────────────────────────────────────────────
 	r.Post("/auth/login", cfg.AuthHandler.Login)
 	r.Post("/auth/refresh", cfg.AuthHandler.Refresh)
-	r.Post("/auth/logout", cfg.AuthHandler.Logout)
+	r.With(pkgmiddleware.Authenticate(jwtCfg)).Post("/auth/logout", cfg.AuthHandler.Logout)
 
 	// ── API key introspection — called by downstream services ────────────────
 	// Accepts a SHA-256 hash, returns ServiceAccountIdentity. No JWT required.
@@ -62,11 +68,6 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	// Service account and API key management must be done by human admins,
 	// not by service accounts themselves (bootstrapping concern).
 	if cfg.APIKeyHandler != nil {
-		jwtCfg := pkgmiddleware.JWTConfig{
-			PublicKey:  cfg.PublicKey,
-			Issuer:     cfg.Issuer,
-			SubjectKey: cfg.SubjectKey,
-		}
 		r.Group(func(r chi.Router) {
 			r.Use(pkgmiddleware.Authenticate(jwtCfg))
 			r.Use(pkgmiddleware.RequireRole("ADMIN"))

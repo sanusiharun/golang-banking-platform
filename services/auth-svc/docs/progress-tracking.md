@@ -171,7 +171,6 @@ E1 (Foundation)
 |---|---|---|---|
 | `04_setup_banking_audits.sql` migration not run | E5-T11, audit-svc end-to-end | Ops | Run manually or wire into datasource bootstrap |
 | Introspect endpoint has no auth | E3-T16 | Backend | Add shared-secret header check |
-| Logout `ActorID` uses refresh token not user ID | E5-T12 | Backend | Use `UserIDFromContext(ctx)` in logout handler |
 
 ---
 

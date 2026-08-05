@@ -10,6 +10,7 @@ import (
 	pkgaudit "github.com/sanusi/banking/pkg/audit"
 	"github.com/sanusi/banking/pkg/featureflag"
 	"github.com/sanusi/banking/pkg/httpx"
+	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
 	"github.com/sanusi/banking/services/auth-svc/internal/domain/dto"
 	"github.com/sanusi/banking/services/auth-svc/internal/services"
@@ -165,7 +166,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	_ = h.audit.Publish(r.Context(), pkgaudit.AuditEvent{ //nolint:errcheck // audit publish failure must not block the response to the caller
 		ActorType:   pkgaudit.ActorTypeUser,
-		ActorID:     req.RefreshToken,
+		ActorID:     pkgmiddleware.UserIDFromContext(ctx),
 		Action:      pkgaudit.ActionAuthLogout,
 		Status:      pkgaudit.StatusSuccess,
 		ServiceName: "auth-svc",

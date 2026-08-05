@@ -69,6 +69,7 @@ export default function () {
   const user    = randomFrom(TEST_USERS);
   let flowOk    = true;
   let refreshToken = "";
+  let accessToken  = "";
 
   // ── Step 1: Login ─────────────────────────────────────────
   group("Step 1: Login", function () {
@@ -89,6 +90,7 @@ export default function () {
 
     if (ok) {
       refreshToken = body.data.refresh_token;
+      accessToken  = body.data.access_token;
     } else {
       flowOk = false;
       console.error(`[Login FAIL] VU${__VU} user=${user.username} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
@@ -122,6 +124,7 @@ export default function () {
 
     if (ok) {
       refreshToken = body.data.refresh_token;
+      accessToken  = body.data.access_token;
     } else {
       flowOk = false;
       console.error(`[Refresh FAIL] VU${__VU} status=${res.status} body=${(res.body || "").substring(0, 200)}`);
@@ -141,7 +144,7 @@ export default function () {
     const res = http.post(
       `${AUTH_URL}/auth/logout`,
       JSON.stringify({ refresh_token: refreshToken }),
-      { headers: buildHeaders("application/json") }
+      { headers: buildHeaders("application/json", { Authorization: `Bearer ${accessToken}` }) }
     );
 
     logoutDuration.add(res.timings.duration);

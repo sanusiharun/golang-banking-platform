@@ -285,7 +285,7 @@ export default function () {
     const res = http.post(
       `${AUTH_URL}/auth/logout`,
       JSON.stringify({ refresh_token: refreshToken }),
-      { headers: buildHeaders("application/json") }
+      { headers: buildHeaders("application/json", { Authorization: `Bearer ${accessToken}` }) }
     );
 
     check(res, {

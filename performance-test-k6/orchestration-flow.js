@@ -362,7 +362,7 @@ export default function () {
     const res = http.post(
       `${GATEWAY_URL}/auth/logout`,
       JSON.stringify({ refresh_token: refreshToken }),
-      { headers: buildHeaders("application/json") }
+      { headers: buildHeaders("application/json", { Authorization: `Bearer ${accessToken}` }) }
     );
 
     if (res.status === 404 || res.status === 502) gatewayRoutingErrors.add(1);
