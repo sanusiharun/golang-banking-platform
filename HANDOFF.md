@@ -291,6 +291,10 @@ All services use `httpx.WriteError(w, r, err)` — no local `writeXxxError` help
 - `authclient.New(authSvcURL, serviceSecret)` sends the header on every introspect call from account-svc; `SERVICE_SECRET` must match on both services
 - Added to both services' `.env.example`
 
+## Session 2026-08-05 — account-svc test layout (GH #8)
+
+- Moved `internal/services/account_service_test.go` → `tests/unit/account_service_test.go`, package renamed `services_test` → `unit` to match the `tests/unit/` convention used by auth-svc/audit-svc
+
 ---
 
 ## Testing Standards (2026-06-21)
