@@ -6,9 +6,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	httpswagger "github.com/swaggo/http-swagger/v2"
 
 	pkgmiddleware "github.com/sanusi/banking/pkg/middleware"
 	"github.com/sanusi/banking/pkg/observability"
+	_ "github.com/sanusi/banking/services/account-svc/docs" // swagger docs, registered via init()
 )
 
 // RouterConfig holds dependencies needed to build the HTTP router.
@@ -46,6 +48,7 @@ func NewRouter(cfg RouterConfig) http.Handler {
 	r.Get("/healthz/live", cfg.Health.LivenessHandler())
 	r.Get("/healthz/ready", cfg.Health.ReadinessHandler())
 	r.Handle("/metrics", pkgmiddleware.PrometheusHandler())
+	r.Get("/swagger/*", httpswagger.WrapHandler)
 
 	// ── Debug routes — local development only ─────────────────────────────────
 	// These routes are stripped out in staging and production.
