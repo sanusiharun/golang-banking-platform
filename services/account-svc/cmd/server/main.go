@@ -5,6 +5,16 @@
 //  3. Build the dependency container
 //  4. Start the HTTP server
 //  5. Graceful shutdown on SIGTERM / SIGINT
+//
+// @title                       account-svc API
+// @version                     1.0
+// @description                 Account CRUD, credit/debit, and balance operations for the banking platform.
+// @BasePath                    /v1
+// @schemes                     http
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
+// @description                 Bearer JWT, e.g. "Bearer <token>"
 package main
 
 import (

@@ -42,6 +42,19 @@ func NewAccountHandler(svc services.AccountService, validate *validator.Validate
 }
 
 // CreateAccount handles POST /v1/accounts
+//
+// @Summary      Create account
+// @Description  Create a new bank account for a customer
+// @Tags         accounts
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request  body      dto.CreateAccountRequest  true  "Account payload"
+// @Success      201      {object}  httpx.Response[dto.AccountResponse]
+// @Failure      400      {object}  httpx.Response[any]
+// @Failure      401      {object}  httpx.Response[any]
+// @Failure      422      {object}  httpx.Response[any]
+// @Router       /accounts [post]
 func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "CreateAccount")
 	defer span.End()
@@ -93,6 +106,17 @@ func (h *AccountHandler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 //
 //	enabled  → response includes metadata field with extra info
 //	disabled → standard response (default)
+//
+// @Summary      Get account
+// @Description  Get account details by ID
+// @Tags         accounts
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Account ID"
+// @Success      200  {object}  httpx.Response[dto.AccountResponse]
+// @Failure      401  {object}  httpx.Response[any]
+// @Failure      404  {object}  httpx.Response[any]
+// @Router       /accounts/{id} [get]
 func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "GetAccount")
 	defer span.End()
@@ -123,6 +147,17 @@ func (h *AccountHandler) GetAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetBalance handles GET /v1/accounts/{id}/balance
+//
+// @Summary      Get balance
+// @Description  Get the current balance for an account
+// @Tags         accounts
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Account ID"
+// @Success      200  {object}  httpx.Response[dto.BalanceResponse]
+// @Failure      401  {object}  httpx.Response[any]
+// @Failure      404  {object}  httpx.Response[any]
+// @Router       /accounts/{id}/balance [get]
 func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "GetBalance")
 	defer span.End()
@@ -156,6 +191,20 @@ func (h *AccountHandler) GetBalance(w http.ResponseWriter, r *http.Request) {
 //
 // Controlled by Flipt flag: "banking_operation_hours" (string variant, e.g. "07:00-15:00")
 // Requests outside the configured window are rejected with 403.
+//
+// @Summary      Credit account
+// @Description  Credit funds to an account (subject to banking operation hours)
+// @Tags         accounts
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      string             true  "Account ID"
+// @Param        request  body      dto.CreditRequest  true  "Credit payload"
+// @Success      200      {object}  httpx.Response[dto.AccountResponse]
+// @Failure      400      {object}  httpx.Response[any]
+// @Failure      403      {object}  httpx.Response[any]
+// @Failure      422      {object}  httpx.Response[any]
+// @Router       /accounts/{id}/credit [post]
 func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Credit")
 	defer span.End()
@@ -205,6 +254,20 @@ func (h *AccountHandler) Credit(w http.ResponseWriter, r *http.Request) {
 //
 // Controlled by Flipt flag: "banking_operation_hours" (string variant, e.g. "07:00-15:00")
 // Requests outside the configured window are rejected with 403.
+//
+// @Summary      Debit account
+// @Description  Debit funds from an account (subject to banking operation hours)
+// @Tags         accounts
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id       path      string            true  "Account ID"
+// @Param        request  body      dto.DebitRequest  true  "Debit payload"
+// @Success      200      {object}  httpx.Response[dto.AccountResponse]
+// @Failure      400      {object}  httpx.Response[any]
+// @Failure      403      {object}  httpx.Response[any]
+// @Failure      422      {object}  httpx.Response[any]
+// @Router       /accounts/{id}/debit [post]
 func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "Debit")
 	defer span.End()
@@ -251,6 +314,18 @@ func (h *AccountHandler) Debit(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListAccounts handles GET /v1/accounts
+//
+// @Summary      List accounts
+// @Description  List accounts, optionally filtered by customer ID
+// @Tags         accounts
+// @Produce      json
+// @Security     BearerAuth
+// @Param        customer_id  query     string  false  "Filter by customer ID"
+// @Param        page         query     int     false  "Page number"
+// @Param        page_size    query     int     false  "Page size"
+// @Success      200          {object}  httpx.Response[dto.PaginatedAccountsResponse]
+// @Failure      401          {object}  httpx.Response[any]
+// @Router       /accounts [get]
 func (h *AccountHandler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	ctx, span := h.tr.Start(r.Context(), "ListAccounts")
 	defer span.End()

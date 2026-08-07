@@ -166,6 +166,7 @@ environment:
 - API key lookup: Redis-first → HTTP introspect fallback → write-back on miss (self-healing)
 - Feature flags: `show_account_metadata`, `banking_operation_hours`
 - Async audit publishing via NATS → NoopPublisher fallback
+- Swagger docs (2026-08-07): `swaggo/swag` annotations on all `AccountHandler` endpoints, served at `GET /swagger/index.html`. Generated files (`docs/docs.go`, `docs/swagger.{json,yaml}`) checked in — regenerate with `swag init -g cmd/server/main.go -o docs --parseDependency --parseInternal` after changing annotations
 
 ### audit-svc (port 8083 — fully wired)
 - NATS consumer → `banking_audits` Postgres DB
